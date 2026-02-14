@@ -103,15 +103,27 @@
                 @endif
 
                 @if ($isThinking)
-                    <div class="flex justify-start" x-init="$nextTick(() => observeStream())">
+                    <div
+                        class="flex justify-start"
+                        x-data="{ streaming: false }"
+                        x-init="$nextTick(() => {
+                            observeStream();
+                            const target = document.querySelector('[wire\\\\:stream=streamedResponse]');
+                            if (target) {
+                                new MutationObserver((mutations, obs) => {
+                                    streaming = true;
+                                    obs.disconnect();
+                                }).observe(target, { childList: true, characterData: true, subtree: true });
+                            }
+                        })"
+                    >
                         <div class="max-w-[85%] rounded-2xl rounded-bl-md px-4 py-3 bg-aegis-surface border border-aegis-border text-aegis-text text-sm leading-relaxed">
-                            <div class="markdown-body text-sm max-w-none" wire:stream="streamedResponse">
-                                <div class="flex items-center gap-1.5">
-                                    <span class="w-1.5 h-1.5 rounded-full bg-aegis-accent animate-bounce" style="animation-delay: 0ms"></span>
-                                    <span class="w-1.5 h-1.5 rounded-full bg-aegis-accent animate-bounce" style="animation-delay: 150ms"></span>
-                                    <span class="w-1.5 h-1.5 rounded-full bg-aegis-accent animate-bounce" style="animation-delay: 300ms"></span>
-                                </div>
+                            <div x-show="!streaming" class="flex items-center gap-1.5">
+                                <span class="w-1.5 h-1.5 rounded-full bg-aegis-accent animate-bounce" style="animation-delay: 0ms"></span>
+                                <span class="w-1.5 h-1.5 rounded-full bg-aegis-accent animate-bounce" style="animation-delay: 150ms"></span>
+                                <span class="w-1.5 h-1.5 rounded-full bg-aegis-accent animate-bounce" style="animation-delay: 300ms"></span>
                             </div>
+                            <div class="markdown-body text-sm max-w-none" wire:stream="streamedResponse"></div>
                         </div>
                     </div>
                 @endif
