@@ -14,7 +14,7 @@
             });
         },
         observeStream() {
-            const target = document.querySelector('[wire\\:stream=streamedResponse]');
+            const target = document.getElementById('stream-target');
             if (!target) return;
             const observer = new MutationObserver(() => this.scrollToBottom());
             observer.observe(target, { childList: true, characterData: true, subtree: true });
@@ -108,7 +108,7 @@
                         x-data="{ streaming: false }"
                         x-init="$nextTick(() => {
                             observeStream();
-                            const target = document.querySelector('[wire\\\\:stream=streamedResponse]');
+                            const target = document.getElementById('stream-target');
                             if (target) {
                                 new MutationObserver((mutations, obs) => {
                                     streaming = true;
@@ -123,7 +123,7 @@
                                 <span class="w-1.5 h-1.5 rounded-full bg-aegis-accent animate-bounce" style="animation-delay: 150ms"></span>
                                 <span class="w-1.5 h-1.5 rounded-full bg-aegis-accent animate-bounce" style="animation-delay: 300ms"></span>
                             </div>
-                            <div class="markdown-body text-sm max-w-none" wire:stream="streamedResponse"></div>
+                            <div id="stream-target" class="markdown-body text-sm max-w-none" wire:stream="streamedResponse"></div>
                         </div>
                     </div>
                 @endif
