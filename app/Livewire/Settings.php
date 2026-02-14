@@ -18,6 +18,7 @@ use App\Security\ProviderConfig;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
 use Livewire\Component;
+use Throwable;
 
 class Settings extends Component
 {
@@ -171,7 +172,8 @@ class Settings extends Component
                 $service = app(MarketplaceService::class);
                 $marketplacePlugins = $service->search($this->marketplaceQuery);
                 $marketplaceUpdates = collect($service->checkUpdates())->keyBy('name')->all();
-            } catch (InvalidArgumentException) {
+            } catch (Throwable) {
+                // Marketplace unreachable — show cached data or empty
             }
         }
 

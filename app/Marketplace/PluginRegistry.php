@@ -4,6 +4,7 @@ namespace App\Marketplace;
 
 use App\Models\MarketplacePlugin;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
 
@@ -15,10 +16,14 @@ class PluginRegistry
             return $this->all();
         }
 
-        $response = Http::timeout(15)->get($this->endpoint('/plugins'));
+        try {
+            $response = Http::timeout(10)->get($this->endpoint('/plugins'));
+        } catch (ConnectionException) {
+            return $this->all();
+        }
 
         if (! $response->successful()) {
-            throw new InvalidArgumentException('Marketplace registry sync failed.');
+            return $this->all();
         }
 
         $plugins = $response->json('data', $response->json());
