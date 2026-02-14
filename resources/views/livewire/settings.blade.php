@@ -1,9 +1,18 @@
 <div class="max-w-4xl mx-auto px-6 py-8 space-y-8">
 
     {{-- Header --}}
-    <div>
-        <h2 class="font-display font-bold text-2xl tracking-tight text-aegis-text">Settings</h2>
-        <p class="mt-1 text-sm text-aegis-text-dim">Manage providers, security, and application preferences.</p>
+    <div class="flex items-start justify-between gap-4">
+        <div>
+            <h2 class="font-display font-bold text-2xl tracking-tight text-aegis-text">Settings</h2>
+            <p class="mt-1 text-sm text-aegis-text-dim">Manage providers, security, and application preferences.</p>
+        </div>
+        <a href="{{ route('chat') }}" class="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm text-aegis-text-dim hover:text-aegis-text hover:bg-aegis-surface-hover border border-aegis-border transition-all duration-150">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12"/>
+                <polyline points="12 19 5 12 12 5"/>
+            </svg>
+            Back to Chat
+        </a>
     </div>
 
     {{-- Flash Message --}}

@@ -16,6 +16,13 @@ class ConversationSidebar extends Component
     public function selectConversation(int $conversationId): void
     {
         $this->activeConversationId = $conversationId;
+
+        if (! request()->routeIs('chat', 'chat.conversation')) {
+            $this->redirect(route('chat.conversation', $conversationId), navigate: true);
+
+            return;
+        }
+
         $this->dispatch('conversation-selected', conversationId: $conversationId);
     }
 
@@ -25,6 +32,13 @@ class ConversationSidebar extends Component
         $conversation = $service->create('');
 
         $this->activeConversationId = $conversation->id;
+
+        if (! request()->routeIs('chat', 'chat.conversation')) {
+            $this->redirect(route('chat.conversation', $conversation->id), navigate: true);
+
+            return;
+        }
+
         $this->dispatch('conversation-selected', conversationId: $conversation->id);
     }
 
@@ -52,7 +66,7 @@ class ConversationSidebar extends Component
             ->orderByDesc('id');
 
         if (trim($this->search) !== '') {
-            $query->where('title', 'like', '%' . trim($this->search) . '%');
+            $query->where('title', 'like', '%'.trim($this->search).'%');
         }
 
         return view('livewire.conversation-sidebar', [

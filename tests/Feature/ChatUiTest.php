@@ -184,7 +184,7 @@ it('creates a new conversation from sidebar', function () {
 
     Livewire::test(ConversationSidebar::class)
         ->call('createConversation')
-        ->assertDispatched('conversation-selected');
+        ->assertRedirect();
 
     expect(Conversation::count())->toBe(1);
 });
@@ -204,7 +204,7 @@ it('selects a conversation and dispatches event', function () {
     Livewire::test(ConversationSidebar::class)
         ->call('selectConversation', $conversation->id)
         ->assertSet('activeConversationId', $conversation->id)
-        ->assertDispatched('conversation-selected', conversationId: $conversation->id);
+        ->assertRedirect(route('chat.conversation', $conversation->id));
 });
 
 it('searches conversations by title', function () {
