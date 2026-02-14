@@ -1,0 +1,1 @@
+- 2026-02-13: No dedicated async queue path exists in current messaging stack, so Slack 3-second acknowledgment is handled with `app()->terminating(...)` follow-up execution.

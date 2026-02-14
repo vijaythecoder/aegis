@@ -1,0 +1,16 @@
+{
+    "name": "test-plugin",
+    "version": "0.1.0",
+    "description": "Plugin test-plugin",
+    "author": "Aegis Team",
+    "permissions": [
+        "none"
+    ],
+    "provider": "TestPlugin\\TestPluginServiceProvider",
+    "tools": [],
+    "autoload": {
+        "psr-4": {
+            "TestPlugin\\": "src/"
+        }
+    }
+}

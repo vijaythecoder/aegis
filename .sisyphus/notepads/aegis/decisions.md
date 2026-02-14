@@ -1,0 +1,2 @@
+- 2026-02-13: Slack adapter follows existing adapter pattern (`handleIncomingMessage` + `sendMessage`) and uses Laravel `Http` facade against `https://slack.com/api/chat.postMessage` to keep dependencies minimal.
+- 2026-02-13: Route-level Slack URL challenge handling was implemented in `routes/messaging.php` instead of controller-specific logic to stay consistent with existing webhook route architecture.

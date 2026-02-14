@@ -1,0 +1,146 @@
+openapi: 3.1.0
+info:
+  title: Aegis Marketplace API
+  version: 0.1.0
+  description: API contract for marketplace plugin discovery, detail, download metadata, and publish.
+servers:
+  - url: https://marketplace.aegis.dev
+paths:
+  /api/plugins:
+    get:
+      summary: List plugins
+      operationId: listPlugins
+      responses:
+        '200':
+          description: Plugin list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Plugin'
+                required: [data]
+    post:
+      summary: Publish plugin metadata
+      operationId: publishPlugin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PluginPublishRequest'
+      responses:
+        '201':
+          description: Plugin metadata accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                required: [status]
+  /api/plugins/{name}:
+    get:
+      summary: Get plugin details
+      operationId: getPlugin
+      parameters:
+        - $ref: '#/components/parameters/PluginName'
+      responses:
+        '200':
+          description: Plugin detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Plugin'
+                required: [data]
+        '404':
+          description: Plugin not found
+  /api/plugins/{name}/download:
+    get:
+      summary: Get plugin download source metadata
+      operationId: getPluginDownload
+      parameters:
+        - $ref: '#/components/parameters/PluginName'
+      responses:
+        '200':
+          description: Plugin source metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  source:
+                    type: string
+                    description: Install source path or repository URL.
+                required: [source]
+        '404':
+          description: Plugin not found
+components:
+  parameters:
+    PluginName:
+      name: name
+      in: path
+      required: true
+      schema:
+        type: string
+  schemas:
+    Plugin:
+      type: object
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+        description:
+          type: string
+        author:
+          type: string
+        downloads:
+          type: integer
+          minimum: 0
+        rating:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 5
+        trust_tier:
+          type: string
+          enum: [verified, community, unverified]
+        manifest_url:
+          type: string
+          format: uri
+        checksum:
+          type: string
+      required:
+        - name
+        - version
+        - description
+        - author
+        - downloads
+        - rating
+        - trust_tier
+        - manifest_url
+        - checksum
+    PluginPublishRequest:
+      allOf:
+        - $ref: '#/components/schemas/Plugin'
+        - type: object
+          properties:
+            provider:
+              type: string
+            permissions:
+              type: array
+              items:
+                type: string
+            tools:
+              type: array
+              items:
+                type: string
+          required: [provider, permissions, tools]

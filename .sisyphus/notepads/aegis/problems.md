@@ -1,0 +1,1 @@
+- 2026-02-13: None currently unresolved for Slack adapter scope.

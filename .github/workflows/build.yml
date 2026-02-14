@@ -1,0 +1,119 @@
+name: Build & Release
+
+on:
+  push:
+    branches: ['release/*']
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+env:
+  PHP_VERSION: '8.3'
+  NODE_VERSION: '20'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: sqlite3, sodium, mbstring
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: composer install --no-interaction --prefer-dist
+      - run: npm ci
+      - run: cp .env.example .env && php artisan key:generate
+      - run: php artisan test
+
+  build-macos:
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: sqlite3, sodium, mbstring
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: composer install --no-interaction --prefer-dist
+      - run: npm ci
+      - run: cp .env.example .env && php artisan key:generate
+      - run: php artisan native:build mac
+        env:
+          NATIVEPHP_APPLE_ID: ${{ secrets.APPLE_ID }}
+          NATIVEPHP_APPLE_ID_PASS: ${{ secrets.APPLE_ID_PASS }}
+          NATIVEPHP_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aegis-macos
+          path: dist/*.dmg
+
+  build-windows:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: sqlite3, sodium, mbstring
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: composer install --no-interaction --prefer-dist
+      - run: npm ci
+      - run: copy .env.example .env && php artisan key:generate
+      - run: php artisan native:build win
+        env:
+          NATIVEPHP_AZURE_PUBLISHER_NAME: ${{ secrets.AZURE_PUBLISHER_NAME }}
+          NATIVEPHP_AZURE_ENDPOINT: ${{ secrets.AZURE_ENDPOINT }}
+          NATIVEPHP_AZURE_CERTIFICATE_PROFILE_NAME: ${{ secrets.AZURE_CERT_PROFILE }}
+          NATIVEPHP_AZURE_CODE_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aegis-windows
+          path: dist/*.exe
+
+  build-linux:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: sqlite3, sodium, mbstring
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: composer install --no-interaction --prefer-dist
+      - run: npm ci
+      - run: cp .env.example .env && php artisan key:generate
+      - run: php artisan native:build linux
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aegis-linux
+          path: |
+            dist/*.AppImage
+            dist/*.deb
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build-macos, build-windows, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          files: artifacts/*
