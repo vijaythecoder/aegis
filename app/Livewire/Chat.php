@@ -4,7 +4,6 @@ namespace App\Livewire;
 
 use App\Agent\AgentOrchestrator;
 use App\Agent\StreamBuffer;
-use App\Enums\MessageRole;
 use App\Memory\ConversationService;
 use App\Memory\MessageService;
 use Illuminate\Support\Str;
@@ -69,11 +68,29 @@ class Chat extends Component
                     $this->stream(to: 'streamedResponse', content: $chunk);
                 },
             );
+
+            $this->generateTitleIfNeeded($text);
         } finally {
             $this->isThinking = false;
             $this->dispatch('agent-status-changed', state: 'idle');
             $this->dispatch('message-sent');
         }
+    }
+
+    private function generateTitleIfNeeded(string $userMessage): void
+    {
+        if ($this->conversationId === null) {
+            return;
+        }
+
+        $conversation = \App\Models\Conversation::query()->find($this->conversationId);
+
+        if (! $conversation || trim((string) $conversation->title) !== '') {
+            return;
+        }
+
+        app(ConversationService::class)->generateTitle($this->conversationId, $userMessage);
+        $this->dispatch('conversation-title-updated');
     }
 
     #[On('conversation-selected')]

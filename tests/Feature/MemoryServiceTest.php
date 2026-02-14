@@ -9,6 +9,8 @@ use App\Memory\MessageService;
 use App\Models\Conversation;
 use App\Models\Memory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\Testing\TextResponseFake;
 
 uses(RefreshDatabase::class);
 
@@ -52,14 +54,30 @@ it('archives updates title and deletes conversations', function () {
     expect(Conversation::query()->find($conversation->id))->toBeNull();
 });
 
-it('auto titles from first message when initial title is empty', function () {
+it('generates title for untitled conversation via ConversationService', function () {
     $conversationService = app(ConversationService::class);
-    $messageService = app(MessageService::class);
-
     $conversation = $conversationService->create('');
     $content = 'I need help drafting a multi-quarter product roadmap for B2B teams.';
 
-    $messageService->store($conversation->id, MessageRole::User, $content);
+    Prism::fake([
+        TextResponseFake::make()->withText('B2B Product Roadmap Help'),
+    ]);
+
+    $conversationService->generateTitle($conversation->id, $content);
+
+    expect($conversation->fresh()->title)->toBe('B2B Product Roadmap Help');
+});
+
+it('falls back to truncated message when LLM unavailable', function () {
+    $conversationService = app(ConversationService::class);
+    $conversation = $conversationService->create('');
+    $content = 'I need help drafting a multi-quarter product roadmap for B2B teams.';
+
+    Prism::fake([
+        TextResponseFake::make()->withText(''),
+    ]);
+
+    $conversationService->generateTitle($conversation->id, $content);
 
     expect($conversation->fresh()->title)->toBe(substr($content, 0, 50));
 });

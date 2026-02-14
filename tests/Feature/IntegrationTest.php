@@ -221,7 +221,7 @@ it('manages conversation lifecycle from creation to archive and cascade delete',
     $conversationService = app(ConversationService::class);
     $messageService = app(MessageService::class);
 
-    $conversation = $conversationService->create('', 'claude-sonnet-4', 'anthropic');
+    $conversation = $conversationService->create('First lifecycle message', 'claude-sonnet-4', 'anthropic');
     $messageService->store($conversation->id, MessageRole::User, 'First lifecycle message');
     $messageService->store($conversation->id, MessageRole::Assistant, 'Lifecycle response');
 

@@ -9,12 +9,9 @@ use Illuminate\Support\Collection;
 
 class MessageService
 {
-    public function __construct(private readonly ConversationService $conversationService) {}
-
     public function store(int $conversationId, MessageRole $role, string $content, ?array $toolData = null): Message
     {
         $conversation = Conversation::query()->findOrFail($conversationId);
-        $isFirstMessage = ! Message::query()->where('conversation_id', $conversationId)->exists();
 
         $message = Message::query()->create([
             'conversation_id' => $conversationId,
@@ -25,10 +22,6 @@ class MessageService
             'tool_result' => $toolData['tool_result'] ?? $toolData,
             'tokens_used' => $this->estimateTokens($content),
         ]);
-
-        if ($isFirstMessage) {
-            $this->conversationService->applyAutoTitleFromMessage($conversation, $content);
-        }
 
         $conversation->forceFill(['last_message_at' => now()])->save();
 

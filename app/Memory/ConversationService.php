@@ -4,6 +4,9 @@ namespace App\Memory;
 
 use App\Models\Conversation;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\Log;
+use Prism\Prism\Facades\Prism;
+use Throwable;
 
 class ConversationService
 {
@@ -45,24 +48,48 @@ class ConversationService
         Conversation::query()->whereKey($id)->update(['title' => trim($title)]);
     }
 
-    public function applyAutoTitleFromMessage(Conversation $conversation, string $message): void
+    public function generateTitle(int $conversationId, string $userMessage): void
     {
-        if (trim((string) $conversation->title) !== '') {
+        $conversation = Conversation::query()->find($conversationId);
+
+        if (! $conversation || trim((string) $conversation->title) !== '') {
             return;
         }
 
-        $title = $this->titleFromMessage($message);
+        $title = $this->generateTitleViaLlm($userMessage);
         $conversation->forceFill(['title' => $title])->save();
     }
 
-    public function titleFromMessage(string $message): string
+    private function generateTitleViaLlm(string $userMessage): string
     {
-        $message = trim((string) preg_replace('/\s+/', ' ', $message));
+        $fallback = mb_substr(trim((string) preg_replace('/\s+/', ' ', $userMessage)), 0, 50);
 
-        if ($message === '') {
+        if ($fallback === '') {
             return 'New conversation';
         }
 
-        return mb_substr($message, 0, 50);
+        $provider = (string) config('aegis.agent.summary_provider', 'anthropic');
+        $model = (string) config('aegis.agent.summary_model', 'claude-3-5-haiku-latest');
+
+        try {
+            $response = Prism::text()
+                ->using($provider, $model)
+                ->withClientOptions(['timeout' => 10])
+                ->withSystemPrompt('Generate a short conversation title (max 6 words) for the user message below. Return ONLY the title text, no quotes, no punctuation at the end.')
+                ->withPrompt(mb_substr($userMessage, 0, 500))
+                ->asText();
+
+            $title = trim($response->text);
+
+            if ($title === '' || mb_strlen($title) > 80) {
+                return $fallback;
+            }
+
+            return $title;
+        } catch (Throwable $e) {
+            Log::debug('Title generation failed, using fallback', ['error' => $e->getMessage()]);
+
+            return $fallback;
+        }
     }
 }

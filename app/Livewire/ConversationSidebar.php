@@ -59,6 +59,12 @@ class ConversationSidebar extends Component
         $this->activeConversationId = $conversationId;
     }
 
+    #[On('conversation-title-updated')]
+    public function onTitleUpdated(): void
+    {
+        // Re-render triggers query refresh in render()
+    }
+
     public function render()
     {
         $query = Conversation::query()
