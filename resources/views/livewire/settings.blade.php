@@ -385,33 +385,103 @@
                 </div>
 
                 {{-- Task Form --}}
-                @if ($editingTaskId !== null || ($taskName !== '' || $taskSchedule !== '' || $taskPrompt !== ''))
+                @if ($showTaskForm)
                     <div class="rounded-xl border border-aegis-accent/20 bg-aegis-850 p-5 space-y-4">
                         <h4 class="text-sm font-semibold text-aegis-text">
                             {{ $editingTaskId ? 'Edit Task' : 'New Task' }}
                         </h4>
 
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-xs font-medium text-aegis-text-dim mb-1.5">Name</label>
-                                <input
-                                    type="text"
-                                    wire:model="taskName"
-                                    placeholder="Morning Briefing"
-                                    class="w-full px-3 py-2 rounded-lg bg-aegis-900 border border-aegis-border text-sm text-aegis-text placeholder:text-aegis-text-dim/40 focus:outline-none focus:border-aegis-accent/40 focus:ring-1 focus:ring-aegis-accent/20 transition-colors"
-                                />
-                                @error('taskName') <p class="text-xs text-red-400 mt-1">{{ $message }}</p> @enderror
+                        <div>
+                            <label class="block text-xs font-medium text-aegis-text-dim mb-1.5">Name</label>
+                            <input
+                                type="text"
+                                wire:model="taskName"
+                                placeholder="Morning Briefing"
+                                class="w-full px-3 py-2 rounded-lg bg-aegis-900 border border-aegis-border text-sm text-aegis-text placeholder:text-aegis-text-dim/40 focus:outline-none focus:border-aegis-accent/40 focus:ring-1 focus:ring-aegis-accent/20 transition-colors"
+                            />
+                            @error('taskName') <p class="text-xs text-red-400 mt-1">{{ $message }}</p> @enderror
+                        </div>
+
+                        <div class="space-y-3">
+                            <label class="block text-xs font-medium text-aegis-text-dim mb-1.5">Schedule</label>
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div>
+                                    <select
+                                        wire:model.live="taskFrequency"
+                                        class="w-full px-3 py-2 rounded-lg bg-aegis-900 border border-aegis-border text-sm text-aegis-text focus:outline-none focus:border-aegis-accent/40 focus:ring-1 focus:ring-aegis-accent/20 transition-colors"
+                                    >
+                                        <option value="daily">Daily</option>
+                                        <option value="weekly">Weekly</option>
+                                        <option value="monthly">Monthly</option>
+                                        <option value="hourly">Hourly</option>
+                                        <option value="custom">Custom (Cron)</option>
+                                    </select>
+                                    @error('taskFrequency') <p class="text-xs text-red-400 mt-1">{{ $message }}</p> @enderror
+                                </div>
+
+                                @if (in_array($taskFrequency, ['daily', 'weekly', 'monthly']))
+                                    <div>
+                                        <input
+                                            type="time"
+                                            wire:model="taskTime"
+                                            class="w-full px-3 py-2 rounded-lg bg-aegis-900 border border-aegis-border text-sm text-aegis-text focus:outline-none focus:border-aegis-accent/40 focus:ring-1 focus:ring-aegis-accent/20 transition-colors"
+                                        />
+                                        @error('taskTime') <p class="text-xs text-red-400 mt-1">{{ $message }}</p> @enderror
+                                    </div>
+                                @endif
+
+                                @if ($taskFrequency === 'weekly')
+                                    <div>
+                                        <select
+                                            wire:model="taskDayOfWeek"
+                                            class="w-full px-3 py-2 rounded-lg bg-aegis-900 border border-aegis-border text-sm text-aegis-text focus:outline-none focus:border-aegis-accent/40 focus:ring-1 focus:ring-aegis-accent/20 transition-colors"
+                                        >
+                                            <option value="1">Monday</option>
+                                            <option value="2">Tuesday</option>
+                                            <option value="3">Wednesday</option>
+                                            <option value="4">Thursday</option>
+                                            <option value="5">Friday</option>
+                                            <option value="6">Saturday</option>
+                                            <option value="0">Sunday</option>
+                                            <option value="1-5">Weekdays</option>
+                                        </select>
+                                        @error('taskDayOfWeek') <p class="text-xs text-red-400 mt-1">{{ $message }}</p> @enderror
+                                    </div>
+                                @endif
+
+                                @if ($taskFrequency === 'monthly')
+                                    <div>
+                                        <select
+                                            wire:model="taskDayOfMonth"
+                                            class="w-full px-3 py-2 rounded-lg bg-aegis-900 border border-aegis-border text-sm text-aegis-text focus:outline-none focus:border-aegis-accent/40 focus:ring-1 focus:ring-aegis-accent/20 transition-colors"
+                                        >
+                                            @for ($d = 1; $d <= 28; $d++)
+                                                <option value="{{ $d }}">{{ $d }}{{ match($d) { 1, 21 => 'st', 2, 22 => 'nd', 3, 23 => 'rd', default => 'th' } }}</option>
+                                            @endfor
+                                        </select>
+                                        @error('taskDayOfMonth') <p class="text-xs text-red-400 mt-1">{{ $message }}</p> @enderror
+                                    </div>
+                                @endif
                             </div>
-                            <div>
-                                <label class="block text-xs font-medium text-aegis-text-dim mb-1.5">Schedule (Cron)</label>
-                                <input
-                                    type="text"
-                                    wire:model="taskSchedule"
-                                    placeholder="0 8 * * 1-5"
-                                    class="w-full px-3 py-2 rounded-lg bg-aegis-900 border border-aegis-border text-sm text-aegis-text placeholder:text-aegis-text-dim/40 focus:outline-none focus:border-aegis-accent/40 focus:ring-1 focus:ring-aegis-accent/20 font-mono transition-colors"
-                                />
-                                @error('taskSchedule') <p class="text-xs text-red-400 mt-1">{{ $message }}</p> @enderror
-                            </div>
+
+                            @if ($taskFrequency === 'custom')
+                                <div>
+                                    <input
+                                        type="text"
+                                        wire:model="taskSchedule"
+                                        placeholder="0 8 * * 1-5"
+                                        class="w-full px-3 py-2 rounded-lg bg-aegis-900 border border-aegis-border text-sm text-aegis-text placeholder:text-aegis-text-dim/40 focus:outline-none focus:border-aegis-accent/40 focus:ring-1 focus:ring-aegis-accent/20 font-mono transition-colors"
+                                    />
+                                    <p class="text-[10px] text-aegis-text-dim/50 mt-1">Standard 5-field cron: minute hour day month weekday</p>
+                                    @error('taskSchedule') <p class="text-xs text-red-400 mt-1">{{ $message }}</p> @enderror
+                                </div>
+                            @endif
+
+                            @if ($taskFrequency === 'hourly')
+                                <div>
+                                    <p class="text-[10px] text-aegis-text-dim/50">Runs every hour on the hour.</p>
+                                </div>
+                            @endif
                         </div>
 
                         <div>
@@ -488,7 +558,7 @@
                                         <div class="min-w-0 flex-1">
                                             <div class="flex items-center gap-2">
                                                 <p class="text-sm font-medium text-aegis-text">{{ $task->name }}</p>
-                                                <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-aegis-800 text-aegis-text-dim border border-aegis-border">{{ $task->schedule }}</span>
+                                                <span class="text-[10px] px-1.5 py-0.5 rounded bg-aegis-800 text-aegis-text-dim border border-aegis-border">{{ $task->human_schedule }}</span>
                                                 <span @class([
                                                     'text-[10px] px-1.5 py-0.5 rounded-full font-medium border',
                                                     'bg-emerald-500/10 text-emerald-400 border-emerald-400/20' => $task->delivery_channel === 'chat',

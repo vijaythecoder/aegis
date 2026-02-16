@@ -130,7 +130,8 @@ class AegisAgent implements Agent, Conversational, HasMiddleware, HasTools
         $storeIds = KnowledgeSearchTool::vectorStoreIds();
 
         if ($storeIds !== []) {
-            $provider = Ai::textProviderFor($this, $this->provider());
+            $providerName = $this->resolvedProvider()[0];
+            $provider = Ai::textProviderFor($this, $providerName);
 
             if ($provider instanceof SupportsFileSearch) {
                 $tools[] = new FileSearch($storeIds);

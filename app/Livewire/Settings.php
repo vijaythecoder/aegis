@@ -21,11 +21,13 @@ use App\Security\ApiKeyManager;
 use App\Security\ProviderConfig;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 use Throwable;
 
 class Settings extends Component
 {
+    #[Url(as: 'tab')]
     public string $activeTab = 'providers';
 
     public string $apiKeyInput = '';
@@ -48,9 +50,19 @@ class Settings extends Component
 
     public int $embeddingDimensions = 768;
 
+    public bool $showTaskForm = false;
+
     public ?int $editingTaskId = null;
 
     public string $taskName = '';
+
+    public string $taskFrequency = 'daily';
+
+    public string $taskTime = '08:00';
+
+    public string $taskDayOfWeek = '1';
+
+    public string $taskDayOfMonth = '1';
 
     public string $taskSchedule = '';
 
@@ -290,27 +302,46 @@ class Settings extends Component
     {
         $task = ProactiveTask::query()->findOrFail($id);
 
+        $this->showTaskForm = true;
         $this->editingTaskId = $task->id;
         $this->taskName = $task->name;
-        $this->taskSchedule = $task->schedule;
         $this->taskPrompt = $task->prompt;
         $this->taskDeliveryChannel = $task->delivery_channel;
+        $this->parseCronToSchedule($task->schedule);
     }
 
     public function saveTask(): void
     {
-        $this->validate([
+        $rules = [
             'taskName' => 'required|string|max:255',
-            'taskSchedule' => 'required|string|max:100',
+            'taskFrequency' => 'required|in:daily,weekly,monthly,hourly,custom',
             'taskPrompt' => 'required|string',
             'taskDeliveryChannel' => 'required|in:chat,telegram,notification',
-        ]);
+        ];
+
+        if ($this->taskFrequency === 'custom') {
+            $rules['taskSchedule'] = 'required|string|max:100';
+        } elseif (in_array($this->taskFrequency, ['daily', 'weekly', 'monthly'])) {
+            $rules['taskTime'] = 'required|date_format:H:i';
+        }
+
+        if ($this->taskFrequency === 'weekly') {
+            $rules['taskDayOfWeek'] = 'required|in:0,1,2,3,4,5,6,1-5';
+        }
+
+        if ($this->taskFrequency === 'monthly') {
+            $rules['taskDayOfMonth'] = 'required|integer|between:1,28';
+        }
+
+        $this->validate($rules);
+
+        $schedule = $this->buildCronFromSchedule();
 
         if ($this->editingTaskId !== null) {
             $task = ProactiveTask::query()->findOrFail($this->editingTaskId);
             $task->update([
                 'name' => $this->taskName,
-                'schedule' => $this->taskSchedule,
+                'schedule' => $schedule,
                 'prompt' => $this->taskPrompt,
                 'delivery_channel' => $this->taskDeliveryChannel,
             ]);
@@ -318,7 +349,7 @@ class Settings extends Component
         } else {
             ProactiveTask::query()->create([
                 'name' => $this->taskName,
-                'schedule' => $this->taskSchedule,
+                'schedule' => $schedule,
                 'prompt' => $this->taskPrompt,
                 'delivery_channel' => $this->taskDeliveryChannel,
                 'is_active' => false,
@@ -340,7 +371,7 @@ class Settings extends Component
     public function newTask(): void
     {
         $this->resetTaskForm();
-        $this->editingTaskId = null;
+        $this->showTaskForm = true;
     }
 
     public function cancelTaskEdit(): void
@@ -350,11 +381,166 @@ class Settings extends Component
 
     private function resetTaskForm(): void
     {
+        $this->showTaskForm = false;
         $this->editingTaskId = null;
         $this->taskName = '';
+        $this->taskFrequency = 'daily';
+        $this->taskTime = '08:00';
+        $this->taskDayOfWeek = '1';
+        $this->taskDayOfMonth = '1';
         $this->taskSchedule = '';
         $this->taskPrompt = '';
         $this->taskDeliveryChannel = 'chat';
+    }
+
+    private function buildCronFromSchedule(): string
+    {
+        if ($this->taskFrequency === 'custom') {
+            return $this->taskSchedule;
+        }
+
+        [$hour, $minute] = array_map('intval', explode(':', $this->taskTime));
+
+        return match ($this->taskFrequency) {
+            'hourly' => "{$minute} * * * *",
+            'daily' => "{$minute} {$hour} * * *",
+            'weekly' => "{$minute} {$hour} * * {$this->taskDayOfWeek}",
+            'monthly' => "{$minute} {$hour} {$this->taskDayOfMonth} * *",
+            default => "{$minute} {$hour} * * *",
+        };
+    }
+
+    private function parseCronToSchedule(string $cron): void
+    {
+        $parts = preg_split('/\s+/', trim($cron));
+
+        if (count($parts) !== 5) {
+            $this->taskFrequency = 'custom';
+            $this->taskSchedule = $cron;
+
+            return;
+        }
+
+        [$minute, $hour, $dayOfMonth, $month, $dayOfWeek] = $parts;
+
+        if ($month !== '*') {
+            $this->taskFrequency = 'custom';
+            $this->taskSchedule = $cron;
+
+            return;
+        }
+
+        if ($hour === '*' && $dayOfMonth === '*' && $dayOfWeek === '*') {
+            $this->taskFrequency = 'hourly';
+            $this->taskTime = '00:'.str_pad($minute, 2, '0', STR_PAD_LEFT);
+
+            return;
+        }
+
+        $this->taskTime = str_pad($hour, 2, '0', STR_PAD_LEFT).':'.str_pad($minute, 2, '0', STR_PAD_LEFT);
+
+        if ($dayOfMonth !== '*' && $dayOfWeek === '*') {
+            $this->taskFrequency = 'monthly';
+            $this->taskDayOfMonth = $dayOfMonth;
+
+            return;
+        }
+
+        if ($dayOfMonth === '*' && $dayOfWeek !== '*') {
+            $this->taskFrequency = 'weekly';
+            $this->taskDayOfWeek = $dayOfWeek;
+
+            return;
+        }
+
+        if ($dayOfMonth === '*' && $dayOfWeek === '*') {
+            $this->taskFrequency = 'daily';
+
+            return;
+        }
+
+        $this->taskFrequency = 'custom';
+        $this->taskSchedule = $cron;
+    }
+
+    public static function humanReadableSchedule(string $cron): string
+    {
+        $parts = preg_split('/\s+/', trim($cron));
+
+        if (count($parts) !== 5) {
+            return $cron;
+        }
+
+        [$minute, $hour, $dayOfMonth, $month, $dayOfWeek] = $parts;
+
+        if ($month !== '*') {
+            return $cron;
+        }
+
+        $dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+        $formatTime = function (string $h, string $m): string {
+            $hour = (int) $h;
+            $min = str_pad($m, 2, '0', STR_PAD_LEFT);
+            $period = $hour >= 12 ? 'PM' : 'AM';
+            $displayHour = $hour % 12 ?: 12;
+
+            return "{$displayHour}:{$min} {$period}";
+        };
+
+        if ($hour === '*' && $dayOfMonth === '*' && $dayOfWeek === '*') {
+            $min = (int) $minute;
+
+            return $min === 0 ? 'Every hour' : "Every hour at :{$minute}";
+        }
+
+        $time = $formatTime($hour, $minute);
+
+        if ($dayOfMonth !== '*' && $dayOfWeek === '*') {
+            $suffix = match ((int) $dayOfMonth) {
+                1, 21, 31 => 'st',
+                2, 22 => 'nd',
+                3, 23 => 'rd',
+                default => 'th',
+            };
+
+            return "Monthly on the {$dayOfMonth}{$suffix} at {$time}";
+        }
+
+        if ($dayOfMonth === '*' && $dayOfWeek !== '*') {
+            if ($dayOfWeek === '*') {
+                return "Daily at {$time}";
+            }
+
+            if ($dayOfWeek === '1-5') {
+                return "Weekdays at {$time}";
+            }
+
+            if ($dayOfWeek === '0,6') {
+                return "Weekends at {$time}";
+            }
+
+            $days = array_map(function ($d) use ($dayNames) {
+                $idx = (int) $d;
+
+                return $dayNames[$idx] ?? $d;
+            }, explode(',', $dayOfWeek));
+
+            if (count($days) === 1) {
+                $fullDayNames = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
+                $idx = (int) $dayOfWeek;
+
+                return ($fullDayNames[$idx] ?? $dayOfWeek)." at {$time}";
+            }
+
+            return implode(', ', $days)." at {$time}";
+        }
+
+        if ($dayOfMonth === '*' && $dayOfWeek === '*') {
+            return "Daily at {$time}";
+        }
+
+        return $cron;
     }
 
     public function render()

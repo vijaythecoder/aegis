@@ -329,13 +329,17 @@ it('creates a new proactive task', function () {
         ->call('setTab', 'automation')
         ->call('newTask')
         ->set('taskName', 'Weekly Report')
-        ->set('taskSchedule', '0 9 * * 1')
+        ->set('taskFrequency', 'weekly')
+        ->set('taskTime', '09:00')
+        ->set('taskDayOfWeek', '1')
         ->set('taskPrompt', 'Generate a weekly report.')
         ->set('taskDeliveryChannel', 'chat')
         ->call('saveTask')
         ->assertSet('flashMessage', 'Task "Weekly Report" created.');
 
-    expect(ProactiveTask::query()->where('name', 'Weekly Report')->exists())->toBeTrue();
+    $task = ProactiveTask::query()->where('name', 'Weekly Report')->first();
+    expect($task)->not->toBeNull()
+        ->and($task->schedule)->toBe('0 9 * * 1');
 });
 
 it('edits an existing proactive task', function () {
@@ -371,8 +375,118 @@ it('validates required fields when creating task', function () {
         ->call('setTab', 'automation')
         ->call('newTask')
         ->set('taskName', '')
-        ->set('taskSchedule', '')
         ->set('taskPrompt', '')
         ->call('saveTask')
-        ->assertHasErrors(['taskName', 'taskSchedule', 'taskPrompt']);
+        ->assertHasErrors(['taskName', 'taskPrompt']);
+});
+
+it('validates custom cron schedule is required', function () {
+    Livewire::test(Settings::class)
+        ->call('setTab', 'automation')
+        ->call('newTask')
+        ->set('taskName', 'Test')
+        ->set('taskFrequency', 'custom')
+        ->set('taskSchedule', '')
+        ->set('taskPrompt', 'Do something')
+        ->call('saveTask')
+        ->assertHasErrors(['taskSchedule']);
+});
+
+it('generates correct cron for daily frequency', function () {
+    Livewire::test(Settings::class)
+        ->call('setTab', 'automation')
+        ->call('newTask')
+        ->set('taskName', 'Daily Task')
+        ->set('taskFrequency', 'daily')
+        ->set('taskTime', '10:30')
+        ->set('taskPrompt', 'Run daily.')
+        ->call('saveTask');
+
+    expect(ProactiveTask::query()->where('name', 'Daily Task')->first()->schedule)->toBe('30 10 * * *');
+});
+
+it('generates correct cron for weekly frequency', function () {
+    Livewire::test(Settings::class)
+        ->call('setTab', 'automation')
+        ->call('newTask')
+        ->set('taskName', 'Weekday Task')
+        ->set('taskFrequency', 'weekly')
+        ->set('taskTime', '08:00')
+        ->set('taskDayOfWeek', '1-5')
+        ->set('taskPrompt', 'Weekday briefing.')
+        ->call('saveTask');
+
+    expect(ProactiveTask::query()->where('name', 'Weekday Task')->first()->schedule)->toBe('0 8 * * 1-5');
+});
+
+it('generates correct cron for monthly frequency', function () {
+    Livewire::test(Settings::class)
+        ->call('setTab', 'automation')
+        ->call('newTask')
+        ->set('taskName', 'Monthly Task')
+        ->set('taskFrequency', 'monthly')
+        ->set('taskTime', '14:00')
+        ->set('taskDayOfMonth', '15')
+        ->set('taskPrompt', 'Monthly report.')
+        ->call('saveTask');
+
+    expect(ProactiveTask::query()->where('name', 'Monthly Task')->first()->schedule)->toBe('0 14 15 * *');
+});
+
+it('generates correct cron for hourly frequency', function () {
+    Livewire::test(Settings::class)
+        ->call('setTab', 'automation')
+        ->call('newTask')
+        ->set('taskName', 'Hourly Check')
+        ->set('taskFrequency', 'hourly')
+        ->set('taskPrompt', 'Check status.')
+        ->call('saveTask');
+
+    expect(ProactiveTask::query()->where('name', 'Hourly Check')->first()->schedule)->toBe('0 * * * *');
+});
+
+it('passes through custom cron expression', function () {
+    Livewire::test(Settings::class)
+        ->call('setTab', 'automation')
+        ->call('newTask')
+        ->set('taskName', 'Custom Task')
+        ->set('taskFrequency', 'custom')
+        ->set('taskSchedule', '*/15 * * * *')
+        ->set('taskPrompt', 'Every 15 minutes.')
+        ->call('saveTask');
+
+    expect(ProactiveTask::query()->where('name', 'Custom Task')->first()->schedule)->toBe('*/15 * * * *');
+});
+
+it('parses existing cron back into picker fields on edit', function () {
+    $task = ProactiveTask::factory()->create([
+        'schedule' => '0 8 * * 1-5',
+    ]);
+
+    Livewire::test(Settings::class)
+        ->call('setTab', 'automation')
+        ->call('editTask', $task->id)
+        ->assertSet('taskFrequency', 'weekly')
+        ->assertSet('taskTime', '08:00')
+        ->assertSet('taskDayOfWeek', '1-5');
+});
+
+it('displays human-readable schedule in task list', function () {
+    ProactiveTask::factory()->create([
+        'name' => 'Briefing',
+        'schedule' => '0 8 * * 1-5',
+    ]);
+
+    Livewire::test(Settings::class)
+        ->call('setTab', 'automation')
+        ->assertSee('Weekdays at 8:00 AM');
+});
+
+it('converts common cron patterns to human text', function () {
+    expect(Settings::humanReadableSchedule('0 8 * * 1-5'))->toBe('Weekdays at 8:00 AM')
+        ->and(Settings::humanReadableSchedule('0 18 * * 0'))->toBe('Sundays at 6:00 PM')
+        ->and(Settings::humanReadableSchedule('0 10 * * *'))->toBe('Daily at 10:00 AM')
+        ->and(Settings::humanReadableSchedule('0 9 * * 1'))->toBe('Mondays at 9:00 AM')
+        ->and(Settings::humanReadableSchedule('30 14 15 * *'))->toBe('Monthly on the 15th at 2:30 PM')
+        ->and(Settings::humanReadableSchedule('0 * * * *'))->toBe('Every hour');
 });

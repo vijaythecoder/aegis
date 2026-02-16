@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Livewire\Settings;
 use Cron\CronExpression;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -28,6 +30,11 @@ class ProactiveTask extends Model
             'last_run_at' => 'datetime',
             'next_run_at' => 'datetime',
         ];
+    }
+
+    protected function humanSchedule(): Attribute
+    {
+        return Attribute::get(fn () => Settings::humanReadableSchedule($this->schedule));
     }
 
     public function isDue(): bool
