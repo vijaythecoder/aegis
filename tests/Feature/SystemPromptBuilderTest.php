@@ -70,3 +70,38 @@ it('includes memory recall instructions', function () {
         ->and($prompt)->toContain('memory_recall')
         ->and($prompt)->toContain('memory_store');
 });
+
+it('includes active procedures in system prompt', function () {
+    \App\Models\Procedure::query()->create([
+        'trigger' => 'user asks about code style',
+        'instruction' => 'Always use const instead of var',
+        'is_active' => true,
+    ]);
+
+    $builder = app(SystemPromptBuilder::class);
+    $prompt = $builder->build();
+
+    expect($prompt)->toContain('Learned Behaviors')
+        ->and($prompt)->toContain('user asks about code style')
+        ->and($prompt)->toContain('Always use const instead of var');
+});
+
+it('excludes inactive procedures from system prompt', function () {
+    \App\Models\Procedure::query()->create([
+        'trigger' => 'user asks about code style',
+        'instruction' => 'Always use const',
+        'is_active' => false,
+    ]);
+
+    $builder = app(SystemPromptBuilder::class);
+    $prompt = $builder->build();
+
+    expect($prompt)->not->toContain('Learned Behaviors');
+});
+
+it('omits procedures section when none exist', function () {
+    $builder = app(SystemPromptBuilder::class);
+    $prompt = $builder->build();
+
+    expect($prompt)->not->toContain('Learned Behaviors');
+});

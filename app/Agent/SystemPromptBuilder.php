@@ -5,6 +5,7 @@ namespace App\Agent;
 use App\Enums\MemoryType;
 use App\Models\Conversation;
 use App\Models\Memory;
+use App\Models\Procedure;
 use App\Tools\ToolRegistry;
 use Illuminate\Support\Collection;
 
@@ -26,6 +27,7 @@ class SystemPromptBuilder
             $this->renderUserProfileSection($userProfile),
             $this->renderPreferencesSection($conversation),
             $this->renderFactsSection($conversation),
+            $this->renderProceduresSection(),
             $this->renderMemoryInstructionsSection(),
         ];
 
@@ -79,6 +81,24 @@ class SystemPromptBuilder
         }
 
         return "Known facts about the user:\n{$facts->implode("\n")}";
+    }
+
+    private function renderProceduresSection(): string
+    {
+        $procedures = Procedure::query()
+            ->where('is_active', true)
+            ->orderBy('trigger')
+            ->limit(20)
+            ->get();
+
+        if ($procedures->isEmpty()) {
+            return '';
+        }
+
+        $lines = $procedures->map(fn (Procedure $p): string => "- When: {$p->trigger} → {$p->instruction}")
+            ->implode("\n");
+
+        return "## Learned Behaviors\nFollow these learned rules:\n{$lines}";
     }
 
     private function renderMemoryInstructionsSection(): string
