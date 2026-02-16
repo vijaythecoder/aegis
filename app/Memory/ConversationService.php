@@ -68,8 +68,8 @@ class ConversationService
             return 'New conversation';
         }
 
-        $provider = (string) config('aegis.agent.summary_provider', config('aegis.agent.default_provider', 'anthropic'));
-        $model = (string) config('aegis.agent.summary_model', '');
+        $provider = (string) (config('aegis.agent.summary_provider') ?: config('aegis.agent.default_provider', 'anthropic'));
+        $model = (string) (config('aegis.agent.summary_model') ?: '');
 
         try {
             $response = Prism::text()

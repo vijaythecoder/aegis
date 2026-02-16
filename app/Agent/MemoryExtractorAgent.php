@@ -26,12 +26,12 @@ class MemoryExtractorAgent implements Agent, HasStructuredOutput
 
     public function provider(): string
     {
-        return (string) config('aegis.agent.summary_provider', config('aegis.agent.default_provider', 'anthropic'));
+        return (string) (config('aegis.agent.summary_provider') ?: config('aegis.agent.default_provider', 'anthropic'));
     }
 
     public function model(): string
     {
-        return (string) config('aegis.agent.summary_model', '');
+        return (string) (config('aegis.agent.summary_model') ?: '');
     }
 
     public function schema(JsonSchema $schema): array

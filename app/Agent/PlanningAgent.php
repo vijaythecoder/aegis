@@ -39,12 +39,12 @@ class PlanningAgent implements Agent
 
     public function provider(): string
     {
-        return (string) config('aegis.agent.summary_provider', config('aegis.agent.default_provider', 'anthropic'));
+        return (string) (config('aegis.agent.summary_provider') ?: config('aegis.agent.default_provider', 'anthropic'));
     }
 
     public function model(): string
     {
-        return (string) config('aegis.agent.summary_model', '');
+        return (string) (config('aegis.agent.summary_model') ?: '');
     }
 
     private function describeTools(): string
