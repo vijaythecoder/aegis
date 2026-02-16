@@ -24,6 +24,10 @@ class MemoryService
             ->first();
 
         if ($memory instanceof Memory) {
+            if ($memory->value !== $value) {
+                $memory->previous_value = $memory->value;
+            }
+
             $memory->value = $value;
             $memory->confidence = $confidence;
 
@@ -93,6 +97,41 @@ class MemoryService
         return Memory::query()
             ->where('type', MemoryType::Fact)
             ->orderBy('key')
+            ->get();
+    }
+
+    public function touchAccessed(int $memoryId): void
+    {
+        Memory::query()
+            ->where('id', $memoryId)
+            ->update(['last_accessed_at' => now()]);
+    }
+
+    public function decayConfidence(float $decayAmount = 0.01, int $staleWeeks = 1): int
+    {
+        $threshold = now()->subWeeks($staleWeeks);
+
+        return Memory::query()
+            ->where('confidence', '>', 0.1)
+            ->where(function ($query) use ($threshold): void {
+                $query->where('last_accessed_at', '<', $threshold)
+                    ->orWhereNull('last_accessed_at');
+            })
+            ->where('updated_at', '<', $threshold)
+            ->update([
+                'confidence' => DB::raw("MAX(0.1, confidence - {$decayAmount})"),
+            ]);
+    }
+
+    public function delete(int $memoryId): bool
+    {
+        return Memory::query()->where('id', $memoryId)->delete() > 0;
+    }
+
+    public function all(): Collection
+    {
+        return Memory::query()
+            ->orderByDesc('updated_at')
             ->get();
     }
 }

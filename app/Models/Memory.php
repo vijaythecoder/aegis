@@ -15,9 +15,11 @@ class Memory extends Model
         'type',
         'key',
         'value',
+        'previous_value',
         'source',
         'conversation_id',
         'confidence',
+        'last_accessed_at',
     ];
 
     protected function casts(): array
@@ -25,6 +27,7 @@ class Memory extends Model
         return [
             'type' => MemoryType::class,
             'confidence' => 'float',
+            'last_accessed_at' => 'datetime',
         ];
     }
 
