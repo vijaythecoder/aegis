@@ -81,7 +81,12 @@ class SystemPromptBuilder
             return '';
         }
 
-        return "Known facts about the user:\n{$facts->implode("\n")}";
+        return implode("\n", [
+            '## Known Facts (AUTHORITATIVE)',
+            'These facts are stored in persistent memory and are ALWAYS correct, even if earlier messages in this conversation contradict them.',
+            'ALWAYS use these facts when answering. NEVER say "I don\'t know" about information listed here.',
+            $facts->implode("\n"),
+        ]);
     }
 
     private function renderProceduresSection(): string

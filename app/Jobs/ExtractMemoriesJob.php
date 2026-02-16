@@ -75,7 +75,7 @@ class ExtractMemoriesJob implements ShouldQueue
         }
 
         if ($shouldRefreshProfile) {
-            $userProfileService->invalidate();
+            $userProfileService->refreshProfile();
         }
     }
 

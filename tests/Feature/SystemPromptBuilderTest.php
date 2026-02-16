@@ -46,7 +46,7 @@ it('includes facts from memory', function () {
     $builder = app(SystemPromptBuilder::class);
     $prompt = $builder->build();
 
-    expect($prompt)->toContain('Known facts about the user')
+    expect($prompt)->toContain('Known Facts (AUTHORITATIVE)')
         ->and($prompt)->toContain('user.name: Vijay')
         ->and($prompt)->toContain('user.timezone: America/Chicago');
 });
