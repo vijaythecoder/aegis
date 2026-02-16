@@ -120,3 +120,30 @@ it('returns embedding as array of floats', function () {
         expect($value)->toBeFloat();
     }
 });
+
+it('returns cached embedding on second call with same text', function () {
+    Embeddings::fake();
+
+    $first = $this->service->embed('Cache me');
+    $second = $this->service->embed('Cache me');
+
+    expect($first)->toBe($second);
+
+    $cacheKey = 'embedding:'.hash('xxh128', 'Cache me');
+    expect(\Illuminate\Support\Facades\Cache::has($cacheKey))->toBeTrue();
+});
+
+it('skips API call for cached content', function () {
+    $fakeVector = Embeddings::fakeEmbedding(768);
+    $cacheKey = 'embedding:'.hash('xxh128', 'Precached text');
+
+    \Illuminate\Support\Facades\Cache::put($cacheKey, $fakeVector, now()->addDay());
+
+    Embeddings::fake();
+
+    $result = $this->service->embed('Precached text');
+
+    expect($result)->toBe($fakeVector);
+
+    Embeddings::assertNothingGenerated();
+});

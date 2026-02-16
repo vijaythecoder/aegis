@@ -2,6 +2,7 @@
 
 namespace App\Memory;
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Embeddings;
 use Throwable;
@@ -19,12 +20,25 @@ class EmbeddingService
             return null;
         }
 
+        $cacheKey = 'embedding:'.hash('xxh128', $text);
+        $cached = Cache::get($cacheKey);
+
+        if (is_array($cached)) {
+            return $cached;
+        }
+
         try {
             $response = Embeddings::for([$text])
                 ->dimensions($this->dimensions())
                 ->generate($this->provider(), $this->model());
 
-            return $response->first();
+            $embedding = $response->first();
+
+            if ($embedding !== null) {
+                Cache::put($cacheKey, $embedding, now()->addDay());
+            }
+
+            return $embedding;
         } catch (Throwable $e) {
             Log::warning('Embedding generation failed', [
                 'provider' => config('aegis.memory.embedding_provider'),
