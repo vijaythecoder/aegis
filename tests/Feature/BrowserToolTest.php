@@ -2,6 +2,7 @@
 
 use App\Tools\BrowserSession;
 use App\Tools\BrowserTool;
+use Laravel\Ai\Tools\Request;
 
 it('navigates to url and returns page metadata', function () {
     $session = Mockery::mock(BrowserSession::class);
@@ -15,15 +16,13 @@ it('navigates to url and returns page metadata', function () {
 
     app()->instance(BrowserSession::class, $session);
 
-    $result = app(BrowserTool::class)->execute([
+    $result = (string) app(BrowserTool::class)->handle(new Request([
         'action' => 'navigate',
         'url' => 'https://example.com',
-    ]);
+    ]));
 
-    expect($result->success)->toBeTrue()
-        ->and($result->output)->toBeArray()
-        ->and($result->output['title'])->toBe('Example Domain')
-        ->and($result->output['url'])->toBe('https://example.com');
+    expect($result)->toContain('Example Domain')
+        ->and($result)->toContain('example.com');
 });
 
 it('captures screenshot and returns file path', function () {
@@ -35,34 +34,30 @@ it('captures screenshot and returns file path', function () {
 
     app()->instance(BrowserSession::class, $session);
 
-    $result = app(BrowserTool::class)->execute([
+    $result = (string) app(BrowserTool::class)->handle(new Request([
         'action' => 'screenshot',
-    ]);
+    ]));
 
-    expect($result->success)->toBeTrue()
-        ->and($result->output)->toBeArray()
-        ->and($result->output['path'])->toContain('screenshots')
-        ->and($result->output['path'])->toContain('.png');
+    expect($result)->toContain('screenshots')
+        ->and($result)->toContain('.png');
 });
 
 it('blocks file scheme urls', function () {
-    $result = app(BrowserTool::class)->execute([
+    $result = (string) app(BrowserTool::class)->handle(new Request([
         'action' => 'navigate',
         'url' => 'file:///etc/passwd',
-    ]);
+    ]));
 
-    expect($result->success)->toBeFalse()
-        ->and(strtolower((string) $result->error))->toContain('blocked');
+    expect(strtolower($result))->toContain('blocked');
 });
 
 it('blocks chrome scheme urls', function () {
-    $result = app(BrowserTool::class)->execute([
+    $result = (string) app(BrowserTool::class)->handle(new Request([
         'action' => 'navigate',
         'url' => 'chrome://settings',
-    ]);
+    ]));
 
-    expect($result->success)->toBeFalse()
-        ->and(strtolower((string) $result->error))->toContain('blocked');
+    expect(strtolower($result))->toContain('blocked');
 });
 
 it('respects browser tab limit by closing oldest tab', function () {
@@ -128,12 +123,10 @@ it('gets text content from selector', function () {
 
     app()->instance(BrowserSession::class, $session);
 
-    $result = app(BrowserTool::class)->execute([
+    $result = (string) app(BrowserTool::class)->handle(new Request([
         'action' => 'get_text',
         'selector' => 'h1',
-    ]);
+    ]));
 
-    expect($result->success)->toBeTrue()
-        ->and($result->output)->toBeArray()
-        ->and($result->output['text'])->toBe('Example Domain');
+    expect($result)->toBe('Example Domain');
 });

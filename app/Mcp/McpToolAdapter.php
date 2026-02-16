@@ -9,6 +9,11 @@ use App\Security\AuditLogger;
 use App\Security\PermissionDecision;
 use App\Security\PermissionManager;
 use App\Tools\ToolRegistry;
+use Illuminate\JsonSchema\JsonSchemaTypeFactory;
+use Illuminate\JsonSchema\Serializer;
+use Illuminate\JsonSchema\Types\ObjectType;
+use Laravel\Ai\Contracts\Tool as SdkTool;
+use Laravel\Ai\Tools\Request as SdkRequest;
 use Throwable;
 
 class McpToolAdapter
@@ -22,12 +27,22 @@ class McpToolAdapter
     public function list(array $allowedTools = ['*']): array
     {
         return collect($this->toolRegistry->all())
-            ->filter(fn (ToolInterface $tool): bool => $this->isAllowedTool($tool->name(), $allowedTools))
-            ->map(fn (ToolInterface $tool): array => [
-                'name' => $tool->name(),
-                'description' => $tool->description(),
-                'inputSchema' => $this->normalizeSchema($tool->parameters()),
-            ])
+            ->filter(fn (mixed $tool, string $name): bool => $this->isAllowedTool($name, $allowedTools))
+            ->map(function (mixed $tool, string $name): array {
+                if ($tool instanceof ToolInterface) {
+                    return [
+                        'name' => $tool->name(),
+                        'description' => $tool->description(),
+                        'inputSchema' => $this->normalizeSchema($tool->parameters()),
+                    ];
+                }
+
+                return [
+                    'name' => $name,
+                    'description' => (string) $tool->description(),
+                    'inputSchema' => $this->sdkToolSchema($tool),
+                ];
+            })
             ->values()
             ->all();
     }
@@ -44,7 +59,7 @@ class McpToolAdapter
 
         $tool = $this->toolRegistry->get($toolName);
 
-        if (! $tool instanceof ToolInterface) {
+        if ($tool === null) {
             $this->auditLogger->log(
                 action: 'mcp.tool.error',
                 toolName: $toolName,
@@ -56,8 +71,9 @@ class McpToolAdapter
             return $this->asError("Unknown tool: {$toolName}");
         }
 
+        $requiredPermission = method_exists($tool, 'requiredPermission') ? $tool->requiredPermission() : 'execute';
         $scope = $conversationId === null ? 'mcp:global' : 'mcp:conversation:'.$conversationId;
-        $decision = $this->permissionManager->check($toolName, $tool->requiredPermission(), [
+        $decision = $this->permissionManager->check($toolName, $requiredPermission, [
             ...$arguments,
             'scope' => $scope,
         ]);
@@ -87,6 +103,10 @@ class McpToolAdapter
         );
 
         try {
+            if ($tool instanceof SdkTool) {
+                return $this->executeSdkTool($tool, $toolName, $arguments, $conversationId);
+            }
+
             $result = $tool->execute($arguments);
 
             $this->auditLogger->log(
@@ -119,6 +139,30 @@ class McpToolAdapter
 
             return $this->asError($exception->getMessage());
         }
+    }
+
+    private function executeSdkTool(SdkTool $tool, string $toolName, array $arguments, ?int $conversationId): array
+    {
+        $response = (string) $tool->handle(new SdkRequest($arguments));
+        $isError = str_starts_with($response, 'Error:');
+
+        $this->auditLogger->log(
+            action: $isError ? 'mcp.tool.error' : 'mcp.tool.executed',
+            toolName: $toolName,
+            parameters: [...$arguments, 'tool_result' => ['output' => $response]],
+            result: $isError ? AuditLogResult::Error->value : AuditLogResult::Allowed->value,
+            conversationId: $conversationId,
+        );
+
+        if ($isError) {
+            return $this->asError($response);
+        }
+
+        return [
+            'content' => [
+                ['type' => 'text', 'text' => $response],
+            ],
+        ];
     }
 
     private function toMcpResult(ToolResult $result): array
@@ -194,6 +238,17 @@ class McpToolAdapter
             'type' => 'object',
             'properties' => $properties,
         ];
+    }
+
+    private function sdkToolSchema(SdkTool $tool): array
+    {
+        try {
+            $properties = $tool->schema(new JsonSchemaTypeFactory);
+
+            return Serializer::serialize(new ObjectType($properties));
+        } catch (Throwable) {
+            return ['type' => 'object', 'properties' => []];
+        }
     }
 
     private function normalizeType(mixed $type): string

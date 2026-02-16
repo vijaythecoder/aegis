@@ -2,9 +2,12 @@
 
 namespace App\Tools;
 
-use App\Agent\ToolResult;
+use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Laravel\Ai\Contracts\Tool;
+use Laravel\Ai\Tools\Request;
+use Stringable;
 
-class BrowserTool extends BaseTool
+class BrowserTool implements Tool
 {
     public function __construct(
         private readonly BrowserSession $session,
@@ -15,129 +18,125 @@ class BrowserTool extends BaseTool
         return 'browser';
     }
 
-    public function description(): string
+    public function requiredPermission(): string
+    {
+        return 'execute';
+    }
+
+    public function description(): Stringable|string
     {
         return 'Browse the web: navigate, screenshot, click, fill forms, extract text';
     }
 
-    public function requiredPermission(): string
-    {
-        return 'browser';
-    }
-
-    public function parameters(): array
+    public function schema(JsonSchema $schema): array
     {
         return [
-            'type' => 'object',
-            'required' => ['action'],
-            'properties' => [
-                'action' => ['type' => 'string', 'description' => 'Action: navigate, screenshot, click, fill, get_text, evaluate, get_page_content'],
-                'url' => ['type' => 'string', 'description' => 'URL to navigate to'],
-                'selector' => ['type' => 'string', 'description' => 'CSS selector for element'],
-                'value' => ['type' => 'string', 'description' => 'Value for fill action'],
-                'javascript' => ['type' => 'string', 'description' => 'JavaScript to evaluate'],
-            ],
+            'action' => $schema->string()->description('Action: navigate, screenshot, click, fill, get_text, evaluate, get_page_content')->required(),
+            'url' => $schema->string()->description('URL to navigate to'),
+            'selector' => $schema->string()->description('CSS selector for element'),
+            'value' => $schema->string()->description('Value for fill action'),
+            'javascript' => $schema->string()->description('JavaScript to evaluate'),
         ];
     }
 
-    public function execute(array $input): ToolResult
+    public function handle(Request $request): Stringable|string
     {
-        $action = (string) ($input['action'] ?? '');
+        $action = (string) $request->string('action');
 
         try {
             return match ($action) {
-                'navigate' => $this->navigate($input),
-                'screenshot' => $this->screenshot($input),
-                'click' => $this->click($input),
-                'fill' => $this->fill($input),
-                'get_text' => $this->getText($input),
-                'evaluate' => $this->evaluate($input),
+                'navigate' => $this->navigate($request),
+                'screenshot' => $this->screenshot($request),
+                'click' => $this->click($request),
+                'fill' => $this->fill($request),
+                'get_text' => $this->getText($request),
+                'evaluate' => $this->evaluate($request),
                 'get_page_content' => $this->getPageContent(),
-                default => new ToolResult(false, null, "Unknown browser action: {$action}"),
+                default => "Error: Unknown browser action: {$action}",
             };
         } catch (\Throwable $e) {
-            return new ToolResult(false, null, $e->getMessage());
+            return 'Error: '.$e->getMessage();
         }
     }
 
-    private function navigate(array $input): ToolResult
+    private function navigate(Request $request): string
     {
-        $url = (string) ($input['url'] ?? '');
+        $url = (string) $request->string('url');
         if ($url === '') {
-            return new ToolResult(false, null, 'URL is required for navigate action.');
+            return 'Error: URL is required for navigate action.';
         }
 
         if ($this->isBlockedUrl($url)) {
-            return new ToolResult(false, null, 'URL is blocked by browser security policy.');
+            return 'Error: URL is blocked by browser security policy.';
         }
 
         $result = $this->session->navigate($url);
 
-        return new ToolResult(true, $result);
+        return is_string($result) ? $result : json_encode($result);
     }
 
-    private function screenshot(array $input): ToolResult
+    private function screenshot(Request $request): string
     {
-        $selector = isset($input['selector']) ? (string) $input['selector'] : null;
+        $selector = $request['selector'] ?? null;
         $path = $this->session->screenshot($selector);
 
-        return new ToolResult(true, ['path' => $path]);
+        return "Screenshot saved to: {$path}";
     }
 
-    private function click(array $input): ToolResult
+    private function click(Request $request): string
     {
-        $selector = (string) ($input['selector'] ?? '');
+        $selector = (string) $request->string('selector');
         if ($selector === '') {
-            return new ToolResult(false, null, 'Selector is required for click action.');
+            return 'Error: Selector is required for click action.';
         }
 
-        $clicked = $this->session->click($selector);
+        $this->session->click($selector);
 
-        return new ToolResult(true, ['clicked' => $clicked]);
+        return "Clicked element: {$selector}";
     }
 
-    private function fill(array $input): ToolResult
+    private function fill(Request $request): string
     {
-        $selector = (string) ($input['selector'] ?? '');
-        $value = (string) ($input['value'] ?? '');
+        $selector = (string) $request->string('selector');
+        $value = (string) $request->string('value');
         if ($selector === '') {
-            return new ToolResult(false, null, 'Selector is required for fill action.');
+            return 'Error: Selector is required for fill action.';
         }
 
-        $filled = $this->session->fill($selector, $value);
+        $this->session->fill($selector, $value);
 
-        return new ToolResult(true, ['filled' => $filled]);
+        return "Filled element {$selector} with value.";
     }
 
-    private function getText(array $input): ToolResult
+    private function getText(Request $request): string
     {
-        $selector = (string) ($input['selector'] ?? '');
+        $selector = (string) $request->string('selector');
         if ($selector === '') {
-            return new ToolResult(false, null, 'Selector is required for get_text action.');
+            return 'Error: Selector is required for get_text action.';
         }
 
         $text = $this->session->getText($selector);
 
-        return new ToolResult(true, ['text' => $text]);
+        return (string) $text;
     }
 
-    private function evaluate(array $input): ToolResult
+    private function evaluate(Request $request): string
     {
-        $javascript = (string) ($input['javascript'] ?? '');
+        $javascript = (string) $request->string('javascript');
         if ($javascript === '') {
-            return new ToolResult(false, null, 'JavaScript is required for evaluate action.');
+            return 'Error: JavaScript is required for evaluate action.';
         }
 
         $value = $this->session->evaluate($javascript);
 
-        return new ToolResult(true, ['value' => $value]);
+        return is_string($value) ? $value : json_encode($value);
     }
 
-    private function getPageContent(): ToolResult
+    private function getPageContent(): string
     {
         $content = $this->session->getPageContent();
 
-        return new ToolResult(true, ['content' => $content]);
+        return (string) $content;
     }
 
     private function isBlockedUrl(string $url): bool

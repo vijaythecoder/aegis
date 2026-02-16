@@ -4,10 +4,12 @@ namespace App\Tools;
 
 use App\Agent\Contracts\ToolInterface;
 use Illuminate\Support\Facades\App;
+use Laravel\Ai\Contracts\Tool;
 use Symfony\Component\Finder\Finder;
 
 class ToolRegistry
 {
+    /** @var array<string, Tool|ToolInterface> */
     private array $tools = [];
 
     public function __construct(?string $toolsPath = null)
@@ -20,7 +22,7 @@ class ToolRegistry
         return $this->tools;
     }
 
-    public function get(string $name): ?ToolInterface
+    public function get(string $name): Tool|ToolInterface|null
     {
         return $this->tools[$name] ?? null;
     }
@@ -30,10 +32,25 @@ class ToolRegistry
         return array_keys($this->tools);
     }
 
-    public function register(ToolInterface $tool): void
+    /**
+     * Register a tool. Accepts both SDK Tool and legacy ToolInterface.
+     *
+     * New SDK usage:  register('name', $sdkTool)
+     * Legacy usage:   register($legacyTool)
+     */
+    public function register(string|ToolInterface $nameOrTool, ?Tool $tool = null): void
     {
-        $this->tools[$tool->name()] = $tool;
-        ksort($this->tools);
+        if ($nameOrTool instanceof ToolInterface) {
+            $this->tools[$nameOrTool->name()] = $nameOrTool;
+            ksort($this->tools);
+
+            return;
+        }
+
+        if ($tool !== null) {
+            $this->tools[$nameOrTool] = $tool;
+            ksort($this->tools);
+        }
     }
 
     public function unregister(string $name): void
@@ -48,22 +65,27 @@ class ToolRegistry
         }
 
         $finder = new Finder;
-        $finder->files()->in($toolsPath)->name('*.php');
+        $finder->files()->in($toolsPath)->name('*.php')->depth(0);
 
         foreach ($finder as $file) {
             $class = 'App\\Tools\\'.$file->getBasename('.php');
 
-            if (! class_exists($class) || ! is_subclass_of($class, ToolInterface::class)) {
+            if (! class_exists($class) || ! is_subclass_of($class, Tool::class)) {
                 continue;
             }
 
             $reflection = new \ReflectionClass($class);
-            if ($reflection->isAbstract()) {
+            if ($reflection->isAbstract() || $reflection->isInterface()) {
                 continue;
             }
 
-            $instance = App::make($class);
-            $this->register($instance);
+            try {
+                $instance = App::make($class);
+                if (method_exists($instance, 'name')) {
+                    $this->register($instance->name(), $instance);
+                }
+            } catch (\Throwable) {
+            }
         }
     }
 }

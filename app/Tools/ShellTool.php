@@ -2,28 +2,18 @@
 
 namespace App\Tools;
 
-use App\Agent\ToolResult;
+use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Process\Exceptions\ProcessTimedOutException;
 use Illuminate\Support\Facades\Process;
+use Laravel\Ai\Contracts\Tool;
+use Laravel\Ai\Tools\Request;
+use Stringable;
 
-class ShellTool extends BaseTool
+class ShellTool implements Tool
 {
     public function name(): string
     {
         return 'shell';
-    }
-
-    public function description(): string
-    {
-        return 'Execute shell commands with safety checks.';
-    }
-
-    public function parameters(): array
-    {
-        return [
-            'command' => 'string',
-            'timeout' => 'int',
-        ];
     }
 
     public function requiredPermission(): string
@@ -31,18 +21,31 @@ class ShellTool extends BaseTool
         return 'execute';
     }
 
-    public function execute(array $input): ToolResult
+    public function description(): Stringable|string
     {
-        $command = (string) ($input['command'] ?? '');
+        return 'Execute shell commands with safety checks.';
+    }
+
+    public function schema(JsonSchema $schema): array
+    {
+        return [
+            'command' => $schema->string()->description('The shell command to execute.')->required(),
+            'timeout' => $schema->integer()->description('Timeout in seconds (default: 30).'),
+        ];
+    }
+
+    public function handle(Request $request): Stringable|string
+    {
+        $command = (string) $request->string('command');
         if ($command === '') {
-            return new ToolResult(false, null, 'Command is required.');
+            return 'Error: Command is required.';
         }
 
         if ($this->isBlockedCommand($command)) {
-            return new ToolResult(false, null, 'Command is blocked by security policy.');
+            return 'Error: Command is blocked by security policy.';
         }
 
-        $timeout = (int) ($input['timeout'] ?? 30);
+        $timeout = $request->integer('timeout', 30);
         if ($timeout <= 0) {
             $timeout = 30;
         }
@@ -50,16 +53,37 @@ class ShellTool extends BaseTool
         try {
             $result = Process::timeout($timeout)->run($command);
         } catch (ProcessTimedOutException) {
-            return new ToolResult(false, null, 'Command timed out.');
+            return 'Error: Command timed out.';
         } catch (\Throwable $e) {
-            return new ToolResult(false, null, $e->getMessage());
+            return 'Error: '.$e->getMessage();
         }
 
-        return new ToolResult(true, [
-            'stdout' => $result->output(),
-            'stderr' => $result->errorOutput(),
-            'exit_code' => $result->exitCode(),
-            'successful' => $result->successful(),
-        ]);
+        $output = $result->output();
+        $stderr = $result->errorOutput();
+        $exitCode = $result->exitCode();
+
+        $response = "Exit code: {$exitCode}\n";
+        if ($output !== '') {
+            $response .= "stdout:\n{$output}";
+        }
+        if ($stderr !== '') {
+            $response .= "stderr:\n{$stderr}";
+        }
+
+        return $response;
+    }
+
+    private function isBlockedCommand(string $command): bool
+    {
+        $blockedCommands = (array) config('aegis.security.blocked_commands', []);
+        $normalizedCommand = strtolower($command);
+
+        foreach ($blockedCommands as $blockedCommand) {
+            if (str_contains($normalizedCommand, strtolower((string) $blockedCommand))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

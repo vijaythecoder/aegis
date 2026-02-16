@@ -2,26 +2,19 @@
 
 namespace App\Tools;
 
-use App\Agent\ToolResult;
+use App\Tools\Concerns\ValidatesPaths;
+use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Laravel\Ai\Contracts\Tool;
+use Laravel\Ai\Tools\Request;
+use Stringable;
 
-class FileWriteTool extends BaseTool
+class FileWriteTool implements Tool
 {
+    use ValidatesPaths;
+
     public function name(): string
     {
         return 'file_write';
-    }
-
-    public function description(): string
-    {
-        return 'Write file contents to allowed paths.';
-    }
-
-    public function parameters(): array
-    {
-        return [
-            'path' => 'string',
-            'content' => 'string',
-        ];
     }
 
     public function requiredPermission(): string
@@ -29,32 +22,42 @@ class FileWriteTool extends BaseTool
         return 'write';
     }
 
-    public function execute(array $input): ToolResult
+    public function description(): Stringable|string
     {
-        $path = (string) ($input['path'] ?? '');
-        $content = (string) ($input['content'] ?? '');
+        return 'Write file contents to allowed paths.';
+    }
+
+    public function schema(JsonSchema $schema): array
+    {
+        return [
+            'path' => $schema->string()->description('Absolute path to write the file to.')->required(),
+            'content' => $schema->string()->description('Content to write to the file.')->required(),
+        ];
+    }
+
+    public function handle(Request $request): Stringable|string
+    {
+        $path = (string) $request->string('path');
+        $content = (string) $request->string('content');
 
         if ($path === '') {
-            return new ToolResult(false, null, 'Path is required.');
+            return 'Error: Path is required.';
         }
 
         if (! $this->validatePath($path)) {
-            return new ToolResult(false, null, 'Path is not allowed.');
+            return 'Error: Path is not allowed.';
         }
 
         $directory = dirname($path);
         if (! is_dir($directory) && ! @mkdir($directory, 0777, true) && ! is_dir($directory)) {
-            return new ToolResult(false, null, 'Failed to create parent directory.');
+            return 'Error: Failed to create parent directory.';
         }
 
         $bytes = @file_put_contents($path, $content);
         if ($bytes === false) {
-            return new ToolResult(false, null, 'Failed to write file.');
+            return 'Error: Failed to write file.';
         }
 
-        return new ToolResult(true, [
-            'path' => $path,
-            'bytes' => $bytes,
-        ]);
+        return "Wrote {$bytes} bytes to {$path}";
     }
 }

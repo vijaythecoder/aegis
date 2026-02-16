@@ -2,25 +2,19 @@
 
 namespace App\Tools;
 
-use App\Agent\ToolResult;
+use App\Tools\Concerns\ValidatesPaths;
+use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Laravel\Ai\Contracts\Tool;
+use Laravel\Ai\Tools\Request;
+use Stringable;
 
-class FileListTool extends BaseTool
+class FileListTool implements Tool
 {
+    use ValidatesPaths;
+
     public function name(): string
     {
         return 'file_list';
-    }
-
-    public function description(): string
-    {
-        return 'List directory contents from allowed paths.';
-    }
-
-    public function parameters(): array
-    {
-        return [
-            'path' => 'string',
-        ];
     }
 
     public function requiredPermission(): string
@@ -28,24 +22,36 @@ class FileListTool extends BaseTool
         return 'read';
     }
 
-    public function execute(array $input): ToolResult
+    public function description(): Stringable|string
     {
-        $path = (string) ($input['path'] ?? '');
+        return 'List directory contents from allowed paths.';
+    }
+
+    public function schema(JsonSchema $schema): array
+    {
+        return [
+            'path' => $schema->string()->description('Absolute path to the directory to list.')->required(),
+        ];
+    }
+
+    public function handle(Request $request): Stringable|string
+    {
+        $path = (string) $request->string('path');
         if ($path === '') {
-            return new ToolResult(false, null, 'Path is required.');
+            return 'Error: Path is required.';
         }
 
         if (! $this->validatePath($path)) {
-            return new ToolResult(false, null, 'Path is not allowed.');
+            return 'Error: Path is not allowed.';
         }
 
         if (! is_dir($path)) {
-            return new ToolResult(false, null, 'Directory does not exist.');
+            return 'Error: Directory does not exist.';
         }
 
         $entries = scandir($path);
         if ($entries === false) {
-            return new ToolResult(false, null, 'Failed to read directory.');
+            return 'Error: Failed to read directory.';
         }
 
         $items = [];
@@ -60,6 +66,6 @@ class FileListTool extends BaseTool
 
         sort($items);
 
-        return new ToolResult(true, $items);
+        return implode("\n", $items);
     }
 }

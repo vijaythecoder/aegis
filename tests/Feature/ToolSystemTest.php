@@ -6,6 +6,8 @@ use App\Tools\FileWriteTool;
 use App\Tools\ShellTool;
 use App\Tools\ToolRegistry;
 use App\Tools\WebSearchTool;
+use Illuminate\Support\Facades\Http;
+use Laravel\Ai\Tools\Request;
 
 it('auto-discovers all concrete tools in registry', function () {
     $registry = app(ToolRegistry::class);
@@ -29,46 +31,44 @@ it('reads file contents for allowed paths', function () {
     file_put_contents($path, 'hello-aegis');
 
     $tool = app(FileReadTool::class);
-    $result = $tool->execute(['path' => $path]);
+    $result = $tool->handle(new Request(['path' => $path]));
 
-    expect($result->success)->toBeTrue()
-        ->and($result->output)->toBe('hello-aegis')
-        ->and($result->error)->toBeNull();
+    expect($result)->toBe('hello-aegis');
 });
 
 it('rejects reading /etc/passwd', function () {
     $tool = app(FileReadTool::class);
-    $result = $tool->execute(['path' => '/etc/passwd']);
+    $result = $tool->handle(new Request(['path' => '/etc/passwd']));
 
-    expect($result->success)->toBeFalse()
-        ->and($result->error)->toContain('not allowed');
+    expect((string) $result)->toContain('Error:')
+        ->and((string) $result)->toContain('not allowed');
 });
 
 it('rejects reading /etc/shadow', function () {
     $tool = app(FileReadTool::class);
-    $result = $tool->execute(['path' => '/etc/shadow']);
+    $result = $tool->handle(new Request(['path' => '/etc/shadow']));
 
-    expect($result->success)->toBeFalse()
-        ->and($result->error)->toContain('not allowed');
+    expect((string) $result)->toContain('Error:')
+        ->and((string) $result)->toContain('not allowed');
 });
 
 it('writes file contents in allowed paths and creates directories', function () {
     $path = storage_path('app/tools/nested/write-ok.txt');
 
     $tool = app(FileWriteTool::class);
-    $result = $tool->execute(['path' => $path, 'content' => 'written-content']);
+    $result = $tool->handle(new Request(['path' => $path, 'content' => 'written-content']));
 
-    expect($result->success)->toBeTrue()
+    expect((string) $result)->toContain('Wrote')
         ->and(file_exists($path))->toBeTrue()
         ->and(file_get_contents($path))->toBe('written-content');
 });
 
 it('rejects writing outside allowed paths', function () {
     $tool = app(FileWriteTool::class);
-    $result = $tool->execute(['path' => '/tmp/aegis-disallowed-write.txt', 'content' => 'x']);
+    $result = $tool->handle(new Request(['path' => '/tmp/aegis-disallowed-write.txt', 'content' => 'x']));
 
-    expect($result->success)->toBeFalse()
-        ->and($result->error)->toContain('not allowed');
+    expect((string) $result)->toContain('Error:')
+        ->and((string) $result)->toContain('not allowed');
 });
 
 it('lists directory contents with file and dir indicators', function () {
@@ -79,18 +79,18 @@ it('lists directory contents with file and dir indicators', function () {
     file_put_contents($dir.'/file.txt', 'a');
 
     $tool = app(FileListTool::class);
-    $result = $tool->execute(['path' => $dir]);
+    $result = $tool->handle(new Request(['path' => $dir]));
 
-    expect($result->success)->toBeTrue()
-        ->and($result->output)->toContain('child/', 'file.txt');
+    expect((string) $result)->toContain('child/')
+        ->and((string) $result)->toContain('file.txt');
 });
 
 it('blocks dangerous shell commands from configured blocklist', function (string $command) {
     $tool = app(ShellTool::class);
-    $result = $tool->execute(['command' => $command]);
+    $result = $tool->handle(new Request(['command' => $command]));
 
-    expect($result->success)->toBeFalse()
-        ->and($result->error)->toContain('blocked');
+    expect((string) $result)->toContain('Error:')
+        ->and((string) $result)->toContain('blocked');
 })->with([
     'rm -rf /',
     'mkfs.ext4 /dev/sda',
@@ -103,33 +103,40 @@ it('executes safe shell commands and returns stdout stderr and exit code', funct
     $command = escapeshellarg(PHP_BINARY).' -r '.escapeshellarg('fwrite(STDOUT, "ok"); fwrite(STDERR, "warn"); exit(3);');
 
     $tool = app(ShellTool::class);
-    $result = $tool->execute(['command' => $command]);
+    $result = (string) $tool->handle(new Request(['command' => $command]));
 
-    expect($result->success)->toBeTrue()
-        ->and($result->output)->toBeArray()
-        ->and($result->output['stdout'])->toContain('ok')
-        ->and($result->output['stderr'])->toContain('warn')
-        ->and($result->output['exit_code'])->toBe(3);
+    expect($result)->toContain('Exit code: 3')
+        ->and($result)->toContain('stdout:')
+        ->and($result)->toContain('ok')
+        ->and($result)->toContain('stderr:')
+        ->and($result)->toContain('warn');
 });
 
 it('times out shell commands when they exceed timeout', function () {
     $command = escapeshellarg(PHP_BINARY).' -r '.escapeshellarg('sleep(2);');
 
     $tool = app(ShellTool::class);
-    $result = $tool->execute([
+    $result = (string) $tool->handle(new Request([
         'command' => $command,
         'timeout' => 1,
-    ]);
+    ]));
 
-    expect($result->success)->toBeFalse()
-        ->and(strtolower((string) $result->error))->toContain('timed out');
+    expect(strtolower($result))->toContain('timed out');
 });
 
-it('returns stubbed response for web search tool', function () {
-    $tool = app(WebSearchTool::class);
-    $result = $tool->execute(['query' => 'laravel process facade']);
+it('returns search results for web search tool', function () {
+    Http::fake([
+        'html.duckduckgo.com/*' => Http::response(
+            '<html><body>'.
+            '<div class="result"><a class="result__a" href="https://laravel.com">Laravel</a>'.
+            '<a class="result__snippet">The PHP Framework For Web Artisans.</a></div>'.
+            '</body></html>',
+        ),
+    ]);
 
-    expect($result->success)->toBeTrue()
-        ->and($result->output)->toContain('Web search not yet implemented')
-        ->and($result->output)->toContain('laravel process facade');
+    $tool = app(WebSearchTool::class);
+    $result = (string) $tool->handle(new Request(['query' => 'laravel process facade']));
+
+    expect($result)->toContain('laravel process facade')
+        ->and($result)->toContain('laravel.com');
 });

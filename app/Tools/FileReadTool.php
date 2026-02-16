@@ -2,25 +2,19 @@
 
 namespace App\Tools;
 
-use App\Agent\ToolResult;
+use App\Tools\Concerns\ValidatesPaths;
+use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Laravel\Ai\Contracts\Tool;
+use Laravel\Ai\Tools\Request;
+use Stringable;
 
-class FileReadTool extends BaseTool
+class FileReadTool implements Tool
 {
+    use ValidatesPaths;
+
     public function name(): string
     {
         return 'file_read';
-    }
-
-    public function description(): string
-    {
-        return 'Read file contents from allowed paths.';
-    }
-
-    public function parameters(): array
-    {
-        return [
-            'path' => 'string',
-        ];
     }
 
     public function requiredPermission(): string
@@ -28,26 +22,38 @@ class FileReadTool extends BaseTool
         return 'read';
     }
 
-    public function execute(array $input): ToolResult
+    public function description(): Stringable|string
     {
-        $path = (string) ($input['path'] ?? '');
+        return 'Read file contents from allowed paths.';
+    }
+
+    public function schema(JsonSchema $schema): array
+    {
+        return [
+            'path' => $schema->string()->description('Absolute path to the file to read.')->required(),
+        ];
+    }
+
+    public function handle(Request $request): Stringable|string
+    {
+        $path = (string) ($request->string('path'));
         if ($path === '') {
-            return new ToolResult(false, null, 'Path is required.');
+            return 'Error: Path is required.';
         }
 
         if (! $this->validatePath($path)) {
-            return new ToolResult(false, null, 'Path is not allowed.');
+            return 'Error: Path is not allowed.';
         }
 
         if (! is_file($path)) {
-            return new ToolResult(false, null, 'File does not exist.');
+            return 'Error: File does not exist.';
         }
 
         $content = @file_get_contents($path);
         if ($content === false) {
-            return new ToolResult(false, null, 'Failed to read file.');
+            return 'Error: Failed to read file.';
         }
 
-        return new ToolResult(true, $content);
+        return $content;
     }
 }
