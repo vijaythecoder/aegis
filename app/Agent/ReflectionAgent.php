@@ -36,6 +36,14 @@ class ReflectionAgent implements Agent
 
     public function model(): string
     {
-        return (string) (config('aegis.agent.summary_model') ?: '');
+        $model = (string) config('aegis.agent.summary_model');
+
+        if ($model !== '') {
+            return $model;
+        }
+
+        $provider = $this->provider();
+
+        return (string) config("aegis.providers.{$provider}.default_model", '');
     }
 }

@@ -78,7 +78,11 @@ class UserProfileService
     private function generateProfileViaLlm(string $memories): ?string
     {
         $provider = (string) (config('aegis.agent.summary_provider') ?: config('aegis.agent.default_provider', 'anthropic'));
-        $model = (string) (config('aegis.agent.summary_model') ?: '');
+        $model = (string) config('aegis.agent.summary_model');
+
+        if ($model === '') {
+            $model = (string) config("aegis.providers.{$provider}.default_model", '');
+        }
 
         try {
             $response = Prism::text()
