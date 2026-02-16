@@ -3,6 +3,7 @@
 namespace App\Memory;
 
 use App\Enums\MemoryType;
+use App\Jobs\ExtractMemoriesJob;
 use App\Models\Conversation;
 
 class FactExtractor
@@ -48,5 +49,10 @@ class FactExtractor
         }
 
         return $stored;
+    }
+
+    public function extractViaLlm(string $userMessage, string $assistantResponse, ?int $conversationId = null): void
+    {
+        ExtractMemoriesJob::dispatch($userMessage, $assistantResponse, $conversationId);
     }
 }
