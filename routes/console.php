@@ -11,3 +11,4 @@ Artisan::command('inspire', function () {
 Schedule::command('aegis:vacuum')->weekly();
 Schedule::command('aegis:memory:decay')->weekly();
 Schedule::command('aegis:memory:consolidate')->monthly();
+Schedule::command('aegis:proactive:run')->everyMinute();
