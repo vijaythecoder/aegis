@@ -1,12 +1,9 @@
 <?php
 
-use App\Agent\AgentOrchestrator;
-use App\Agent\ContextManager;
 use App\Agent\ProviderManager;
 use App\Desktop\UpdateService;
 use App\Marketplace\MarketplaceService;
 use App\Marketplace\PluginRegistry;
-use App\Mcp\AegisMcpServer;
 use App\Messaging\Adapters\DiscordAdapter;
 use App\Messaging\Adapters\IMessageAdapter;
 use App\Messaging\Adapters\SignalAdapter;
@@ -20,7 +17,6 @@ use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\Setting;
 use App\Plugins\PluginManager;
-use App\Plugins\PluginSandbox;
 use App\Plugins\PluginSigner;
 use App\Plugins\PluginVerifier;
 use App\Security\ApiKeyManager;
@@ -43,7 +39,6 @@ it('verifies all core services are resolvable from container', function () {
         ->and(app(PermissionManager::class))->toBeInstanceOf(PermissionManager::class)
         ->and(app(AuditLogger::class))->toBeInstanceOf(AuditLogger::class)
         ->and(app(ApiKeyManager::class))->toBeInstanceOf(ApiKeyManager::class)
-        ->and(app(ContextManager::class))->toBeInstanceOf(ContextManager::class)
         ->and(app(ProviderManager::class))->toBeInstanceOf(ProviderManager::class)
         ->and(app(MessageRouter::class))->toBeInstanceOf(MessageRouter::class)
         ->and(app(SessionBridge::class))->toBeInstanceOf(SessionBridge::class)
@@ -97,17 +92,17 @@ it('verifies mobile pairing flow end-to-end', function () {
 
     $chatResponse = $this->postJson('/api/mobile/chat', [
         'message' => 'Integration test message',
-    ], ['Authorization' => 'Bearer ' . $sessionToken]);
+    ], ['Authorization' => 'Bearer '.$sessionToken]);
     $chatResponse->assertOk()->assertJsonStructure(['conversation_id', 'response']);
 
     $conversationsResponse = $this->getJson('/api/mobile/conversations', [
-        'Authorization' => 'Bearer ' . $sessionToken,
+        'Authorization' => 'Bearer '.$sessionToken,
     ]);
     $conversationsResponse->assertOk();
 
     $conversationId = $chatResponse->json('conversation_id');
     $messagesResponse = $this->getJson("/api/mobile/conversations/{$conversationId}/messages", [
-        'Authorization' => 'Bearer ' . $sessionToken,
+        'Authorization' => 'Bearer '.$sessionToken,
     ]);
     $messagesResponse->assertOk();
 });
@@ -220,7 +215,7 @@ it('verifies FTS5 search works on messages', function () {
     ]);
 
     $results = \Illuminate\Support\Facades\DB::select(
-        "SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?",
+        'SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?',
         ['uniquesearchtoken42']
     );
 

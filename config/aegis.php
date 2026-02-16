@@ -16,6 +16,9 @@ return [
         'max_steps' => env('AEGIS_MAX_STEPS', 10),
         'max_retries' => env('AEGIS_MAX_RETRIES', 3),
         'timeout' => env('AEGIS_TIMEOUT', 120),
+        'project_path' => env('AEGIS_PROJECT_PATH'),
+        'planning_enabled' => (bool) env('AEGIS_PLANNING_ENABLED', true),
+        'reflection_enabled' => (bool) env('AEGIS_REFLECTION_ENABLED', false),
     ],
 
     'providers' => [
@@ -257,6 +260,7 @@ return [
     'security' => [
         'auto_allow_read' => true,
         'approval_timeout' => 60,
+        'sandbox_mode' => env('AEGIS_SANDBOX_MODE', 'auto'),
         'blocked_commands' => [
             'rm -rf /',
             'mkfs',
@@ -285,6 +289,19 @@ return [
         'max_conversation_messages' => 100,
         'fts_enabled' => true,
         'fact_extraction' => true,
+        'embedding_provider' => env('AEGIS_EMBEDDING_PROVIDER', 'openai'),
+        'embedding_model' => env('AEGIS_EMBEDDING_MODEL', 'text-embedding-3-small'),
+        'embedding_dimensions' => (int) env('AEGIS_EMBEDDING_DIMENSIONS', 1536),
+        'hybrid_search_alpha' => (float) env('AEGIS_HYBRID_SEARCH_ALPHA', 0.7),
+        'auto_recall' => (bool) env('AEGIS_MEMORY_AUTO_RECALL', true),
+    ],
+
+    'rag' => [
+        'chunk_size' => (int) env('AEGIS_RAG_CHUNK_SIZE', 512),
+        'chunk_overlap' => (int) env('AEGIS_RAG_CHUNK_OVERLAP', 50),
+        'max_file_size_mb' => (float) env('AEGIS_RAG_MAX_FILE_SIZE_MB', 10),
+        'max_retrieval_results' => (int) env('AEGIS_RAG_MAX_RETRIEVAL_RESULTS', 10),
+        'auto_retrieve' => (bool) env('AEGIS_RAG_AUTO_RETRIEVE', true),
     ],
 
     'context' => [

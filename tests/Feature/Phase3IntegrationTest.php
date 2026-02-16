@@ -1,10 +1,6 @@
 <?php
 
-use App\Agent\AgentOrchestrator;
-use App\Agent\ContextManager;
-use App\Agent\SystemPromptBuilder;
-use App\Enums\MessageRole;
-use App\Marketplace\MarketplaceService;
+use App\Agent\AegisAgent;
 use App\Marketplace\PluginRegistry;
 use App\Mcp\AegisMcpServer;
 use App\Mcp\McpPromptProvider;
@@ -16,25 +12,18 @@ use App\Messaging\MessageRouter;
 use App\Messaging\SessionBridge;
 use App\Models\AuditLog;
 use App\Models\Conversation;
-use App\Models\Message;
 use App\Models\MessagingChannel;
-use App\Models\Setting;
 use App\Plugins\PluginInstaller;
 use App\Plugins\PluginManager;
 use App\Plugins\PluginManifest;
 use App\Plugins\PluginSandbox;
 use App\Plugins\PluginSigner;
 use App\Plugins\PluginVerifier;
-use App\Plugins\SandboxConfig;
-use App\Security\AuditLogger;
-use App\Security\PermissionManager;
 use App\Tools\ToolRegistry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
-use Prism\Prism\Facades\Prism;
-use Prism\Prism\Testing\TextResponseFake;
 
 uses(RefreshDatabase::class);
 
@@ -231,9 +220,7 @@ it('routes whatsapp webhook through adapter to agent and responds within service
     $router = app(MessageRouter::class);
     $router->registerAdapter('whatsapp', $adapter);
 
-    Prism::fake([
-        TextResponseFake::make()->withText('WhatsApp Phase3 response'),
-    ]);
+    AegisAgent::fake(['WhatsApp Phase3 response']);
 
     $payload = json_encode([
         'entry' => [[
@@ -271,12 +258,7 @@ it('routes whatsapp webhook through adapter to agent and responds within service
     expect($channel)->not->toBeNull()
         ->and($channel->conversation)->not->toBeNull();
 
-    $userMsg = Message::query()
-        ->where('conversation_id', $channel->conversation_id)
-        ->where('role', MessageRole::User)
-        ->first();
-
-    expect($userMsg?->content)->toBe('Hello from WhatsApp');
+    AegisAgent::assertPrompted('Hello from WhatsApp');
 });
 
 it('routes slack event callback through adapter to agent with thread support', function () {
@@ -293,9 +275,7 @@ it('routes slack event callback through adapter to agent with thread support', f
     $router = app(MessageRouter::class);
     $router->registerAdapter('slack', $adapter);
 
-    Prism::fake([
-        TextResponseFake::make()->withText('Slack Phase3 response'),
-    ]);
+    AegisAgent::fake(['Slack Phase3 response']);
 
     $timestamp = (string) now()->timestamp;
     $body = json_encode([
@@ -331,12 +311,7 @@ it('routes slack event callback through adapter to agent with thread support', f
 
     expect($channel)->not->toBeNull();
 
-    $userMsg = Message::query()
-        ->where('conversation_id', $channel->conversation_id)
-        ->where('role', MessageRole::User)
-        ->first();
-
-    expect($userMsg?->content)->toBe('Slack integration test');
+    AegisAgent::assertPrompted('Slack integration test');
 });
 
 // --- Security Audit: Attack scenarios that MUST be blocked ---
@@ -409,12 +384,32 @@ it('blocks sandbox escape via symlink path traversal', function () {
     $sandbox = new PluginSandbox;
 
     // Try to access /etc/passwd via path input
-    $tool = new class extends \App\Tools\BaseTool {
-        public function name(): string { return 'sym_tool'; }
-        public function description(): string { return 'Symlink escape test'; }
-        public function requiredPermission(): string { return 'read'; }
-        public function parameters(): array { return ['type' => 'object', 'properties' => ['path' => ['type' => 'string']]]; }
-        public function execute(array $input): \App\Agent\ToolResult { return new \App\Agent\ToolResult(true, 'read'); }
+    $tool = new class extends \App\Tools\BaseTool
+    {
+        public function name(): string
+        {
+            return 'sym_tool';
+        }
+
+        public function description(): string
+        {
+            return 'Symlink escape test';
+        }
+
+        public function requiredPermission(): string
+        {
+            return 'read';
+        }
+
+        public function parameters(): array
+        {
+            return ['type' => 'object', 'properties' => ['path' => ['type' => 'string']]];
+        }
+
+        public function execute(array $input): \App\Agent\ToolResult
+        {
+            return new \App\Agent\ToolResult(true, 'read');
+        }
     };
 
     $result = $sandbox->execute($tool, ['path' => '/etc/passwd'], $manifest);

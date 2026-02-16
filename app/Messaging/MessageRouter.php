@@ -2,7 +2,7 @@
 
 namespace App\Messaging;
 
-use App\Agent\AgentOrchestrator;
+use App\Agent\AegisAgent;
 use App\Messaging\Contracts\MessagingAdapter;
 
 class MessageRouter
@@ -11,7 +11,7 @@ class MessageRouter
 
     public function __construct(
         private readonly SessionBridge $sessionBridge,
-        private readonly ?AgentOrchestrator $orchestrator = null,
+        private readonly ?AegisAgent $agent = null,
     ) {}
 
     public function route(IncomingMessage $message): string
@@ -22,14 +22,11 @@ class MessageRouter
             $message->senderId,
         );
 
-        $orchestrator = $this->orchestrator ?? app(AgentOrchestrator::class);
+        $agent = $this->agent ?? app(AegisAgent::class);
 
-        return $orchestrator->respond(
-            $message->content,
-            $conversation->id,
-            null,
-            null,
-        );
+        $participant = (object) ['id' => $message->senderId];
+
+        return $agent->continue((string) $conversation->id, $participant)->prompt($message->content)->text;
     }
 
     public function registerAdapter(string $platform, MessagingAdapter $adapter): void

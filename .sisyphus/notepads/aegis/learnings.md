@@ -48,3 +48,52 @@
 - 2026-02-13: Slack webhook payloads can arrive as JSON (Events API) or `application/x-www-form-urlencoded` (slash commands), so adapter parsing should branch on `Content-Type` and use `parse_str` for form bodies.
 - 2026-02-13: Thread reply support can be added without changing adapter contracts by encoding thread context in `IncomingMessage::channelId` and decoding in the platform adapter before outbound `chat.postMessage`.
 - 2026-02-13: Slack URL verification is safest handled at route-level with early challenge response so no router/orchestrator work occurs before the verification handshake completes.
+
+- 2026-02-14: AegisAgent is clean and minimal (70 lines) because the SDK's `Promptable` trait provides all public API methods (`prompt()`, `stream()`, `queue()`, `broadcast()`, `fake()`, `assertPrompted()`). The agent class only needs to implement configuration methods.
+- 2026-02-14: `RemembersConversations` trait is auto-detected by `GeneratesText::gatherMiddlewareFor()` which adds `RememberConversation` middleware when `hasConversationParticipant()` returns true. No need to manually add it to `middleware()`.
+- 2026-02-14: `TextGenerationOptions::forAgent()` reads `#[MaxSteps]`, `#[MaxTokens]`, `#[Temperature]` PHP attributes from the agent class via reflection. These must be compile-time constants.
+- 2026-02-14: `AegisAgent::fake()` returns a `FakeTextGateway` that intercepts all `prompt()` and `stream()` calls. The fake streams by splitting text on spaces into `TextDelta` events.
+- 2026-02-14: When adding constructor dependencies to AegisAgent, any test that used `new AegisAgent` directly must be updated to `app(AegisAgent::class)` to get DI resolution.
+
+- 2026-02-14: Task 4-6 Phase 1 completion learnings:
+- 2026-02-14: `MessageRouter::route()` must call `$agent->continue($conversationId, $participant)` before `prompt()` to associate the conversation. Without this, the SDK's conversation store middleware won't save messages.
+- 2026-02-14: `RemembersConversations::continue()` requires 2 args: `(string $conversationId, object $as)` — the `$as` object needs an `id` property. For messaging webhooks, use `(object) ['id' => $senderId]`.
+- 2026-02-14: Webhook integration tests that used `Prism::fake()` must switch to `AegisAgent::fake()` after SDK migration. `Prism::fake()` only intercepts direct Prism calls, not SDK agent calls.
+- 2026-02-14: `AegisAgent::fake()` bypasses the conversation store middleware, so tests can't assert DB message persistence. Use `AegisAgent::assertPrompted()` instead to verify the prompt was received.
+- 2026-02-14: Plugin system (`PluginSandbox`, `PluginServiceProvider`, `McpToolAdapter`) still uses old `ToolInterface`/`ToolResult`/`BaseTool` — these cannot be deleted yet. `ToolRegistry` supports dual registration (SDK Tool + legacy BaseTool).
+- 2026-02-14: Chat.php streaming pattern: `$agent->stream($text)` returns `StreamableAgentResponse`, iterate with `foreach ($stream as $event)`, check `$event instanceof TextDelta`, use `$event->delta` for `$this->stream(to: 'streamedResponse', content: ...)`. After iteration, `$stream->text` has full combined text.
+- 2026-02-14: Phase 1 final test count: 365 passed, 1 pre-existing failure (DesktopShellTest). Started at 385 tests — deleted ~29 tests that tested deleted AgentOrchestrator functionality, added ~9 new SDK-pattern tests.
+
+- 2026-02-14: Phase 2 Unlimited Memory learnings:
+- 2026-02-14: `Embeddings::for([$text])->dimensions($dim)->generate($provider, $model)` returns `EmbeddingsResponse`. Use `->first()` for single embedding, `->embeddings` for batch.
+- 2026-02-14: `Embeddings::fake()` auto-generates random normalized vectors when no explicit response provided. `Embeddings::fakeEmbedding(768)` generates a single random 768-dim vector.
+- 2026-02-14: `Embeddings::assertGenerated(fn ($prompt) => ...)` receives `EmbeddingsPrompt` with `$prompt->inputs`, `$prompt->dimensions`, `$prompt->provider`, `$prompt->model`. Provider has `->name()` method.
+- 2026-02-14: sqlite-vec is BLOCKED in NativePHP — pure PHP cosine similarity works as fallback. Embeddings stored as binary BLOB via `pack('f*', ...)` and decoded with `unpack('f*', ...)`.
+- 2026-02-14: Cosine similarity in PHP: `dot_product / (magnitude_a * magnitude_b)`. For 768-dim vectors, performance is acceptable for <10k embeddings.
+- 2026-02-14: HybridSearchService score fusion: `alpha * vector_score + (1 - alpha) * fts_score`. Default alpha 0.7 (vector-weighted). Deduplication by `source_type_source_id` key.
+- 2026-02-14: `JsonSchema` interface (`Illuminate\Contracts\JsonSchema\JsonSchema`) cannot be resolved from container — use concrete `Illuminate\JsonSchema\JsonSchema` in tests, or skip schema testing.
+- 2026-02-14: ToolRegistry auto-discovers any class in `app/Tools/` implementing `Laravel\Ai\Contracts\Tool` via Symfony Finder. New tools just need to be placed in the directory.
+- 2026-02-14: EmbedConversationMessage listener only embeds `user` and `assistant` roles — skips `system` and `tool` messages to reduce noise.
+- 2026-02-14: Phase 2 final test count: 410 passed (45 new tests added), 1 pre-existing failure (DesktopShellTest).
+
+- 2026-02-14: Phase 3 Knowledge Base / RAG learnings:
+- 2026-02-14: ChunkingService uses strategy pattern: PHP code (brace-depth boundary detection), generic code (regex patterns per language), markdown (heading-based), text (sentence-based with word overlap).
+- 2026-02-14: DocumentIngestionService pipeline: file → validate size → detect type → chunk → batch embed (10 per batch) → store chunks with embedding IDs. Incremental re-indexing via SHA-256 content hash comparison.
+- 2026-02-14: RetrievalService searches VectorStore for `source_type=document_chunk`, then resolves actual chunk content via DocumentChunk model. Falls back to LIKE text search when embeddings disabled.
+- 2026-02-14: SystemPromptBuilder.buildWithContext() injects "Relevant Knowledge:" section from RetrievalService results, capped at 8000 chars. Controlled by `aegis.rag.auto_retrieve` config.
+- 2026-02-14: ProjectContextLoader reads `.aegis/context.md`, `.aegis/instructions.md`, `.cursorrules` from configured project path. Cached for 5 minutes. Max 50KB per file.
+- 2026-02-14: KnowledgeBase Livewire component uses WithFileUploads trait. Documents stored in `storage/app/knowledge/`. Delete cascades: chunks → embeddings → file.
+- 2026-02-14: `Embeddings::fake()` does NOT support `shouldReceive()` — it's not a Mockery mock. Test embedding failures by setting provider to 'disabled' instead.
+- 2026-02-14: Phase 3 final test count: 452 passed (42 new tests added), 1 pre-existing failure (DesktopShellTest).
+
+- 2026-02-14: Phase 4 Advanced Agent learnings:
+- 2026-02-14: `Agent::fake()` takes `Closure|array` not a string. Use `PlanningAgent::fake(['response text'])` with array wrapping.
+- 2026-02-14: `assertPrompted()` callback receives `AgentPrompt` object, not string. Access via `$prompt->prompt` for the user message.
+- 2026-02-14: PlanningStep uses a dedicated `PlanningAgent` (lightweight SDK Agent with `Promptable` trait) calling `summary_provider`/`summary_model` for cost savings.
+- 2026-02-14: ReflectionStep parses `APPROVED:` vs `NEEDS_REVISION:` prefixes from ReflectionAgent response. Returns `ReflectionResult` value object. Default OFF (`reflection_enabled=false`).
+- 2026-02-14: `Embeddings::fake()` generates different random vectors per call — cosine similarity between two random 768-dim vectors is ~0.017. For memory-aware prompt tests, mock `EmbeddingService` to return deterministic vectors.
+- 2026-02-14: `SystemPromptBuilder::buildWithContext()` now injects both "Past Conversations:" (memories via VectorStore, threshold > 0.3) and "Relevant Knowledge:" (RAG via RetrievalService).
+- 2026-02-14: WebSearchTool uses DuckDuckGo HTML form POST (`html.duckduckgo.com/html/`) — no API key required. Parses `result__a` and `result__snippet` CSS classes.
+- 2026-02-14: CodeExecutionTool writes code to temp files, executes via `Process::timeout()`, cleans up. Blocks dangerous patterns (exec, system, passthru, shell_exec, rm -rf). Supports PHP, bash, Python.
+- 2026-02-14: CodeExecutionTool auto-discovers python via `which python3` then `which python` fallback.
+- 2026-02-14: Phase 4 final test count: 484 passed (32 new tests added), 1 pre-existing failure (DesktopShellTest).

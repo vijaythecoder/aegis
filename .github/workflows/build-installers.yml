@@ -1,0 +1,124 @@
+name: Build Installers
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: sqlite3, pdo_sqlite
+          
+      - name: Install Composer dependencies
+        run: composer install --no-dev --optimize-autoloader
+        
+      - name: Install NPM dependencies
+        run: npm ci
+        
+      - name: Build assets
+        run: npm run build
+        
+      - name: Run tests
+        run: php artisan test --compact
+        
+      - name: Build macOS installer
+        run: php artisan native:build mac --no-interaction
+        
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aegis-macos
+          path: dist/*.dmg
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: sqlite3, pdo_sqlite
+          
+      - name: Install Composer dependencies
+        run: composer install --no-dev --optimize-autoloader
+        
+      - name: Install NPM dependencies
+        run: npm ci
+        
+      - name: Build assets
+        run: npm run build
+        
+      - name: Run tests
+        run: php artisan test --compact
+        
+      - name: Build Windows installer
+        run: php artisan native:build win --no-interaction
+        
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aegis-windows
+          path: dist/*.exe
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: sqlite3, pdo_sqlite
+          
+      - name: Install Composer dependencies
+        run: composer install --no-dev --optimize-autoloader
+        
+      - name: Install NPM dependencies
+        run: npm ci
+        
+      - name: Build assets
+        run: npm run build
+        
+      - name: Run tests
+        run: php artisan test --compact
+        
+      - name: Build Linux installer
+        run: php artisan native:build linux --no-interaction
+        
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aegis-linux
+          path: dist/*.AppImage
+
+  create-release:
+    needs: [build-macos, build-windows, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            aegis-macos/*.dmg
+            aegis-windows/*.exe
+            aegis-linux/*.AppImage
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
