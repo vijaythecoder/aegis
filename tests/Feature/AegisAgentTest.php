@@ -30,11 +30,51 @@ it('returns instructions from SystemPromptBuilder', function () {
 it('returns provider and model from config', function () {
     config(['aegis.agent.default_provider' => 'openai']);
     config(['aegis.agent.default_model' => 'gpt-4o']);
+    config(['aegis.agent.failover_enabled' => false]);
 
     $agent = app(AegisAgent::class);
 
     expect($agent->provider())->toBe('openai')
         ->and($agent->model())->toBe('gpt-4o');
+});
+
+it('returns failover chain when failover is enabled', function () {
+    config(['aegis.agent.default_provider' => 'anthropic']);
+    config(['aegis.agent.default_model' => 'claude-sonnet-4-20250514']);
+    config(['aegis.agent.failover_enabled' => true]);
+    config(['aegis.failover_chain' => ['openai', 'gemini']]);
+
+    $agent = app(AegisAgent::class);
+    $provider = $agent->provider();
+
+    expect($provider)->toBeArray()
+        ->and(array_keys($provider))->toContain('anthropic')
+        ->and(array_keys($provider))->toContain('openai')
+        ->and(array_keys($provider))->toContain('gemini')
+        ->and($provider['anthropic'])->toBe('claude-sonnet-4-20250514')
+        ->and($provider['openai'])->toBeNull()
+        ->and($provider['gemini'])->toBeNull();
+});
+
+it('returns single provider when failover is disabled', function () {
+    config(['aegis.agent.default_provider' => 'anthropic']);
+    config(['aegis.agent.failover_enabled' => false]);
+
+    $agent = app(AegisAgent::class);
+
+    expect($agent->provider())->toBeString()->toBe('anthropic');
+});
+
+it('excludes duplicates in failover chain', function () {
+    config(['aegis.agent.default_provider' => 'anthropic']);
+    config(['aegis.agent.failover_enabled' => true]);
+    config(['aegis.failover_chain' => ['anthropic', 'openai']]);
+
+    $agent = app(AegisAgent::class);
+    $provider = $agent->provider();
+
+    expect(array_keys($provider))->toHaveCount(2)
+        ->and(array_keys($provider))->toBe(['anthropic', 'openai']);
 });
 
 it('returns timeout from config', function () {

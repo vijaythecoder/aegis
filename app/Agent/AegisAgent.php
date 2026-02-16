@@ -54,8 +54,12 @@ class AegisAgent implements Agent, Conversational, HasMiddleware, HasTools
         return $this->promptBuilder->build(userProfile: $userProfile);
     }
 
-    public function provider(): string
+    public function provider(): string|array
     {
+        if (config('aegis.agent.failover_enabled', true)) {
+            return $this->failoverChain();
+        }
+
         return $this->resolvedProvider()[0];
     }
 
@@ -83,6 +87,24 @@ class AegisAgent implements Agent, Conversational, HasMiddleware, HasTools
             ->where('group', 'agent')
             ->where('key', 'model_role')
             ->value('value') ?? 'default';
+    }
+
+    /**
+     * @return array<string, string|null>
+     */
+    private function failoverChain(): array
+    {
+        [$primary, $model] = $this->resolvedProvider();
+
+        $chain = [$primary => $model];
+
+        foreach (config('aegis.failover_chain', []) as $fallback) {
+            if (is_string($fallback) && $fallback !== '' && $fallback !== $primary) {
+                $chain[$fallback] = null;
+            }
+        }
+
+        return $chain;
     }
 
     /**

@@ -107,6 +107,7 @@ it('reads provider model and timeout from aegis agent configuration', function (
     config()->set('aegis.agent.default_provider', 'openai');
     config()->set('aegis.agent.default_model', 'gpt-4o-mini');
     config()->set('aegis.agent.timeout', 45);
+    config()->set('aegis.agent.failover_enabled', false);
 
     $agent = app(AegisAgent::class);
 

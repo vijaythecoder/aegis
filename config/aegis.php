@@ -19,6 +19,7 @@ return [
         'project_path' => env('AEGIS_PROJECT_PATH'),
         'planning_enabled' => (bool) env('AEGIS_PLANNING_ENABLED', true),
         'reflection_enabled' => (bool) env('AEGIS_REFLECTION_ENABLED', false),
+        'failover_enabled' => (bool) env('AEGIS_FAILOVER_ENABLED', true),
     ],
 
     'providers' => [
