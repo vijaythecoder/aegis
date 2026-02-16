@@ -121,7 +121,11 @@ class TelegramPollCommand extends Command
 
             try {
                 $reply = $router->route($incoming);
-                $this->sendReply($baseUrl, $chatId, $reply);
+                $this->sendReply($baseUrl, $chatId, $reply->text);
+
+                foreach ($reply->attachments as $attachment) {
+                    $this->sendPhoto($baseUrl, $chatId, $attachment['path']);
+                }
             } catch (\Throwable $e) {
                 Log::warning('telegram.poll.route_error', [
                     'chat_id' => $chatId,
@@ -141,6 +145,20 @@ class TelegramPollCommand extends Command
                 'parse_mode' => 'Markdown',
             ]);
         }
+    }
+
+    private function sendPhoto(string $baseUrl, string $chatId, string $filePath): void
+    {
+        if (! file_exists($filePath)) {
+            Log::warning('telegram.poll.photo_not_found', ['path' => $filePath]);
+
+            return;
+        }
+
+        Http::attach('photo', (string) file_get_contents($filePath), basename($filePath))
+            ->post("{$baseUrl}/sendPhoto", [
+                'chat_id' => $chatId,
+            ]);
     }
 
     /**

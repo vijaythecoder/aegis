@@ -63,9 +63,9 @@ it('routes message to agent and returns response for adapter sending', function 
     $router->registerAdapter('telegram', $adapter);
 
     $response = $router->route($incoming);
-    $router->getAdapter('telegram')?->sendMessage($incoming->channelId, $response);
+    $router->getAdapter('telegram')?->sendMessage($incoming->channelId, $response->text);
 
-    expect($response)->toBe('Hello back from Aegis');
+    expect($response->text)->toBe('Hello back from Aegis');
 });
 
 it('creates new conversation and messaging channel for unknown platform channel', function () {
@@ -164,7 +164,7 @@ it('dispatches memory extraction after routing message', function () {
     $router = new MessageRouter($sessionBridge);
     $response = $router->route($incoming);
 
-    expect($response)->toBe('Here is how automations work');
+    expect($response->text)->toBe('Here is how automations work');
 
     \Illuminate\Support\Facades\Queue::assertPushed(\App\Jobs\ExtractMemoriesJob::class);
 });

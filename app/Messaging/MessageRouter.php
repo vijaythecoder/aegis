@@ -5,6 +5,7 @@ namespace App\Messaging;
 use App\Agent\AegisAgent;
 use App\Jobs\ExtractMemoriesJob;
 use App\Messaging\Contracts\MessagingAdapter;
+use App\Tools\BrowserTool;
 use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Streaming\Events\TextDelta;
 
@@ -17,7 +18,7 @@ class MessageRouter
         private readonly ?AegisAgent $agent = null,
     ) {}
 
-    public function route(IncomingMessage $message): string
+    public function route(IncomingMessage $message): RoutedResponse
     {
         $conversation = $this->sessionBridge->resolveConversation(
             $message->platform,
@@ -38,6 +39,8 @@ class MessageRouter
             'tool_count' => $toolCount,
         ]);
 
+        BrowserTool::flushScreenshots();
+
         $stream = $agent->stream($message->content);
 
         $responseText = '';
@@ -52,7 +55,12 @@ class MessageRouter
             ExtractMemoriesJob::dispatch($message->content, $responseText, $conversation->id);
         }
 
-        return $responseText;
+        $attachments = array_map(
+            fn (string $path): array => ['path' => $path, 'type' => 'photo'],
+            BrowserTool::flushScreenshots(),
+        );
+
+        return new RoutedResponse($responseText, $attachments);
     }
 
     public function registerAdapter(string $platform, MessagingAdapter $adapter): void

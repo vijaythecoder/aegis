@@ -10,9 +10,20 @@ use Stringable;
 
 class BrowserTool implements Tool
 {
+    /** @var list<string> */
+    private static array $pendingScreenshots = [];
+
     public function __construct(
         private readonly BrowserSession $session,
     ) {}
+
+    public static function flushScreenshots(): array
+    {
+        $paths = self::$pendingScreenshots;
+        self::$pendingScreenshots = [];
+
+        return $paths;
+    }
 
     public function name(): string
     {
@@ -101,6 +112,10 @@ class BrowserTool implements Tool
             is_string($selector) && $selector !== '' ? $selector : null,
             is_string($url) && $url !== '' ? $url : null,
         );
+
+        if ($path !== '' && file_exists($path)) {
+            self::$pendingScreenshots[] = $path;
+        }
 
         return "Screenshot saved to: {$path}";
     }

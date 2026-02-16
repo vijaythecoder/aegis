@@ -11,6 +11,7 @@ use App\Models\MessagingChannel;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use RuntimeException;
+use SergiX44\Nutgram\Telegram\Types\Internal\InputFile;
 
 class TelegramAdapter extends BaseAdapter
 {
@@ -36,13 +37,15 @@ class TelegramAdapter extends BaseAdapter
     public function sendMedia(string $channelId, string $path, string $type): void
     {
         $this->safeExecute(function () use ($channelId, $path, $type): void {
+            $file = file_exists($path) ? InputFile::make($path) : $path;
+
             if (in_array(strtolower($type), ['photo', 'image'], true)) {
-                $this->getBot()->sendPhoto(photo: $path, chat_id: $channelId);
+                $this->getBot()->sendPhoto(photo: $file, chat_id: $channelId);
 
                 return;
             }
 
-            $this->getBot()->sendDocument(document: $path, chat_id: $channelId);
+            $this->getBot()->sendDocument(document: $file, chat_id: $channelId);
         });
     }
 
@@ -127,7 +130,11 @@ class TelegramAdapter extends BaseAdapter
             }
 
             $response = $router->route($incoming);
-            $this->sendMessage($incoming->channelId, $response);
+            $this->sendMessage($incoming->channelId, $response->text);
+
+            foreach ($response->attachments as $attachment) {
+                $this->sendMedia($incoming->channelId, $attachment['path'], $attachment['type']);
+            }
         });
 
         $bot->run();
