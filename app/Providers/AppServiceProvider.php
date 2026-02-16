@@ -2,7 +2,8 @@
 
 namespace App\Providers;
 
-use App\Agent\AgentOrchestrator;
+use App\Agent\AegisAgent;
+use App\Agent\AegisConversationStore;
 use App\Desktop\Contracts\DesktopBridge;
 use App\Desktop\ElectronDesktopBridge;
 use App\Messaging\Adapters\DiscordAdapter;
@@ -15,15 +16,17 @@ use App\Messaging\SessionBridge;
 use App\Plugins\PluginInstaller;
 use App\Plugins\PluginManager;
 use App\Tools\ToolRegistry;
-use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\ServiceProvider;
+use Laravel\Ai\Contracts\ConversationStore;
 
 class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        $this->app->singleton(ConversationStore::class, AegisConversationStore::class);
         $this->app->singleton(DesktopBridge::class, ElectronDesktopBridge::class);
-        $this->app->singleton(AgentOrchestrator::class);
+        $this->app->singleton(AegisAgent::class);
         $this->app->singleton(SessionBridge::class);
         $this->app->singleton(ToolRegistry::class);
         $this->app->bind(PluginManager::class, function ($app, array $parameters): PluginManager {
@@ -35,7 +38,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(MessageRouter::class, function ($app): MessageRouter {
             $router = new MessageRouter(
                 sessionBridge: $app->make(SessionBridge::class),
-                orchestrator: $app->make(AgentOrchestrator::class),
+                agent: $app->make(AegisAgent::class),
             );
 
             foreach ((array) config('aegis.messaging.adapters', []) as $platform => $adapterClass) {
@@ -109,22 +112,28 @@ class AppServiceProvider extends ServiceProvider
                 }
             }
 
-            $defaultProvider = \App\Models\Setting::query()
-                ->where('group', 'app')
-                ->where('key', 'default_provider')
-                ->value('value');
+            foreach (['app', 'agent'] as $group) {
+                $defaultProvider = \App\Models\Setting::query()
+                    ->where('group', $group)
+                    ->where('key', 'default_provider')
+                    ->value('value');
 
-            if (is_string($defaultProvider) && $defaultProvider !== '') {
-                config(['aegis.agent.default_provider' => $defaultProvider]);
+                if (is_string($defaultProvider) && $defaultProvider !== '') {
+                    config(['aegis.agent.default_provider' => $defaultProvider]);
+                    break;
+                }
             }
 
-            $defaultModel = \App\Models\Setting::query()
-                ->where('group', 'app')
-                ->where('key', 'default_model')
-                ->value('value');
+            foreach (['app', 'agent'] as $group) {
+                $defaultModel = \App\Models\Setting::query()
+                    ->where('group', $group)
+                    ->where('key', 'default_model')
+                    ->value('value');
 
-            if (is_string($defaultModel) && $defaultModel !== '') {
-                config(['aegis.agent.default_model' => $defaultModel]);
+                if (is_string($defaultModel) && $defaultModel !== '') {
+                    config(['aegis.agent.default_model' => $defaultModel]);
+                    break;
+                }
             }
         } catch (\Throwable) {
             // Database may not be available yet (migrations pending, testing).

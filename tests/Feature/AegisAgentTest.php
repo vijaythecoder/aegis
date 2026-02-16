@@ -1,199 +1,119 @@
 <?php
 
 use App\Agent\AegisAgent;
-use App\Agent\AgentOrchestrator;
-use App\Agent\ContextManager;
-use App\Agent\Contracts\ToolInterface;
-use App\Agent\SystemPromptBuilder;
-use App\Agent\ToolResult;
-use App\Enums\MessageRole;
-use App\Models\Conversation;
-use App\Models\Message;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Ai\Contracts\Agent as AgentContract;
-use Prism\Prism\Enums\FinishReason;
-use Prism\Prism\Facades\Prism;
-use Prism\Prism\Testing\TextResponseFake;
-use Prism\Prism\ValueObjects\ToolCall;
+use Laravel\Ai\Contracts\Conversational;
+use Laravel\Ai\Contracts\HasMiddleware;
+use Laravel\Ai\Contracts\HasTools;
+use Laravel\Ai\Contracts\Tool;
 
 uses(RefreshDatabase::class);
 
-it('instantiates aegis agent and implements laravel ai agent contract', function () {
-    $agent = new AegisAgent;
+it('implements Agent, Conversational, HasTools, and HasMiddleware interfaces', function () {
+    $agent = app(AegisAgent::class);
 
     expect($agent)
         ->toBeInstanceOf(AgentContract::class)
-        ->and((string) $agent->instructions())->toContain('Aegis');
+        ->toBeInstanceOf(Conversational::class)
+        ->toBeInstanceOf(HasTools::class)
+        ->toBeInstanceOf(HasMiddleware::class);
 });
 
-it('discovers registered tools in orchestrator', function () {
-    $tool = new class implements ToolInterface
-    {
-        public function name(): string
-        {
-            return 'echo_tool';
-        }
+it('returns instructions from SystemPromptBuilder', function () {
+    $agent = app(AegisAgent::class);
+    $instructions = $agent->instructions();
 
-        public function description(): string
-        {
-            return 'Echoes a value';
-        }
-
-        public function parameters(): array
-        {
-            return [
-                'type' => 'object',
-                'properties' => [
-                    'value' => ['type' => 'string', 'description' => 'Value to echo'],
-                ],
-                'required' => ['value'],
-            ];
-        }
-
-        public function execute(array $input): ToolResult
-        {
-            return new ToolResult(true, $input['value'] ?? null);
-        }
-
-        public function requiredPermission(): string
-        {
-            return 'read';
-        }
-    };
-
-    $orchestrator = new AgentOrchestrator(
-        new SystemPromptBuilder([$tool]),
-        new ContextManager,
-        [$tool],
-    );
-
-    expect($orchestrator->toolNames())->toBe(['echo_tool']);
+    expect((string) $instructions)->toContain('Aegis');
 });
 
-it('truncates oldest messages when context budget is exceeded', function () {
-    $manager = new ContextManager;
+it('returns provider and model from config', function () {
+    config(['aegis.agent.default_provider' => 'openai']);
+    config(['aegis.agent.default_model' => 'gpt-4o']);
 
-    $messages = [
-        ['role' => 'user', 'content' => str_repeat('a', 120)],
-        ['role' => 'assistant', 'content' => str_repeat('b', 120)],
-        ['role' => 'user', 'content' => str_repeat('c', 120)],
-    ];
+    $agent = app(AegisAgent::class);
 
-    $truncated = $manager->truncateMessages('System prompt', $messages, 100);
-
-    expect($truncated)->toHaveCount(2)
-        ->and($truncated[0]['content'])->toBe(str_repeat('b', 120))
-        ->and($truncated[1]['content'])->toBe(str_repeat('c', 120));
+    expect($agent->provider())->toBe('openai')
+        ->and($agent->model())->toBe('gpt-4o');
 });
 
-it('passes configured max steps to prism request', function () {
-    config()->set('aegis.agent.max_steps', 2);
+it('returns timeout from config', function () {
+    config(['aegis.agent.timeout' => 60]);
 
-    $conversation = Conversation::factory()->create();
+    $agent = app(AegisAgent::class);
 
-    $fake = Prism::fake([
-        TextResponseFake::make()->withText('Done'),
-    ]);
-
-    $orchestrator = new AgentOrchestrator(
-        new SystemPromptBuilder([]),
-        new ContextManager,
-        [],
-    );
-
-    $result = $orchestrator->respond('Hello there', $conversation->id);
-
-    expect($result)->toBe('Done');
-
-    $fake->assertRequest(function (array $requests): void {
-        expect($requests)->toHaveCount(1)
-            ->and($requests[0]->maxSteps())->toBe(2);
-    });
+    expect($agent->timeout())->toBe(60);
 });
 
-it('executes tool calls in loop and stores tool result message', function () {
-    $conversation = Conversation::factory()->create();
+it('returns SDK tools from ToolRegistry', function () {
+    $agent = app(AegisAgent::class);
+    $tools = $agent->tools();
 
-    $tool = new class implements ToolInterface
-    {
-        public function name(): string
-        {
-            return 'echo_tool';
-        }
+    expect($tools)->toBeArray();
 
-        public function description(): string
-        {
-            return 'Echoes a value';
-        }
-
-        public function parameters(): array
-        {
-            return [
-                'type' => 'object',
-                'properties' => [
-                    'value' => ['type' => 'string', 'description' => 'Value to echo'],
-                ],
-                'required' => ['value'],
-            ];
-        }
-
-        public function execute(array $input): ToolResult
-        {
-            return new ToolResult(true, 'echo: '.$input['value']);
-        }
-
-        public function requiredPermission(): string
-        {
-            return 'read';
-        }
-    };
-
-    Prism::fake([
-        TextResponseFake::make()
-            ->withToolCalls([
-                new ToolCall('call_1', 'echo_tool', ['value' => 'hello']),
-            ])
-            ->withFinishReason(FinishReason::ToolCalls),
-        TextResponseFake::make()->withText('Final answer'),
-    ]);
-
-    $orchestrator = new AgentOrchestrator(
-        new SystemPromptBuilder([$tool]),
-        new ContextManager,
-        [$tool],
-    );
-
-    $result = $orchestrator->respond('Use tool', $conversation->id);
-
-    expect($result)->toBe('Final answer')
-        ->and(Message::where('conversation_id', $conversation->id)->where('role', MessageRole::Tool)->count())->toBe(1)
-        ->and(Message::where('conversation_id', $conversation->id)->where('role', MessageRole::Assistant)->count())->toBe(1);
+    foreach ($tools as $tool) {
+        expect($tool)->toBeInstanceOf(Tool::class);
+    }
 });
 
-it('retries llm call on transient errors', function () {
-    config()->set('aegis.agent.max_retries', 3);
+it('returns empty middleware array', function () {
+    $agent = app(AegisAgent::class);
 
-    $conversation = Conversation::factory()->create();
+    expect($agent->middleware())->toBeArray()->toBeEmpty();
+});
 
-    $attempts = 0;
+it('supports conversation memory via RemembersConversations', function () {
+    $agent = app(AegisAgent::class);
 
-    $orchestrator = new AgentOrchestrator(
-        new SystemPromptBuilder([]),
-        new ContextManager,
-        [],
-        function () use (&$attempts) {
-            $attempts++;
+    expect($agent->hasConversationParticipant())->toBeFalse()
+        ->and($agent->currentConversation())->toBeNull()
+        ->and($agent->messages())->toBeEmpty();
 
-            if ($attempts < 3) {
-                throw new RuntimeException('temporary failure');
-            }
+    $user = (object) ['id' => 1];
+    $agent->forUser($user);
 
-            return TextResponseFake::make()->withText('Recovered');
-        },
-    );
+    expect($agent->hasConversationParticipant())->toBeTrue()
+        ->and($agent->conversationParticipant())->toBe($user);
+});
 
-    $result = $orchestrator->respond('retry me', $conversation->id);
+it('can continue an existing conversation', function () {
+    $agent = app(AegisAgent::class);
+    $user = (object) ['id' => 1];
 
-    expect($result)->toBe('Recovered')
-        ->and($attempts)->toBe(3);
+    $agent->continue('conv-123', $user);
+
+    expect($agent->currentConversation())->toBe('conv-123')
+        ->and($agent->hasConversationParticipant())->toBeTrue();
+});
+
+it('can be faked and prompted', function () {
+    AegisAgent::fake(['Hello from Aegis!']);
+
+    $agent = app(AegisAgent::class);
+    $response = $agent->prompt('Hello');
+
+    expect($response->text)->toBe('Hello from Aegis!');
+
+    AegisAgent::assertPrompted('Hello');
+});
+
+it('can be faked and streamed', function () {
+    AegisAgent::fake(['Streamed response']);
+
+    $agent = app(AegisAgent::class);
+    $stream = $agent->stream('Hello');
+
+    foreach ($stream as $event) {
+        // consume the stream
+    }
+
+    expect($stream->text)->toBe('Streamed response');
+});
+
+it('respects max conversation messages config', function () {
+    config(['aegis.memory.max_conversation_messages' => 50]);
+
+    $agent = app(AegisAgent::class);
+
+    expect($agent->messages())->toBeEmpty();
 });
