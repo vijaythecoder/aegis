@@ -25,8 +25,10 @@ class ProactiveTaskTool implements Tool
     {
         return 'Create, list, update, delete, or toggle automated tasks that run on a schedule. '
             .'Use this when the user wants recurring actions like morning briefings, reminders, or digests. '
+            .'ALWAYS call list first to check existing tasks before creating — duplicates with the same schedule and channel are rejected. '
             .'The schedule must be a valid cron expression (e.g., "0 8 * * *" for daily at 8am, "0 8 * * 1-5" for weekdays at 8am, "0 9 * * 1" for Mondays at 9am). '
-            .'Delivery channels: "chat" (in-app notification) or "telegram" (Telegram message).';
+            .'Delivery channels: "chat" (in-app notification) or "telegram" (Telegram message). '
+            .'For bulk delete or toggle, pass task_ids as comma-separated IDs (e.g., "6,7,8") or "all".';
     }
 
     public function schema(JsonSchema $schema): array
@@ -37,7 +39,8 @@ class ProactiveTaskTool implements Tool
             'schedule' => $schema->string()->description('Cron expression for when to run. Examples: "0 8 * * *" (daily 8am), "0 8 * * 1-5" (weekdays 8am), "30 9 * * 1" (Mondays 9:30am), "0 18 * * 0" (Sundays 6pm). Times are in the user\'s local timezone.'),
             'prompt' => $schema->string()->description('The instruction for what the AI should do when the task runs (required for create).'),
             'delivery_channel' => $schema->string()->enum(['chat', 'telegram'])->description('Where to deliver the result. Default: "chat".'),
-            'task_id' => $schema->integer()->description('ID of the task to update, delete, or toggle (required for those actions).'),
+            'task_id' => $schema->integer()->description('ID of a single task to update, delete, or toggle. For bulk operations, use task_ids instead.'),
+            'task_ids' => $schema->string()->description('Comma-separated list of task IDs for bulk delete or toggle (e.g., "6,7,8,9"). Use "all" to target every task.'),
             'is_active' => $schema->boolean()->description('Whether to activate the task immediately on creation. Default: true.'),
         ];
     }
@@ -82,6 +85,30 @@ class ProactiveTaskTool implements Tool
 
         $cron = new CronExpression($schedule);
         $nextRun = $isActive ? $cron->getNextRunDate() : null;
+
+        $duplicates = ProactiveTask::query()
+            ->where('schedule', $schedule)
+            ->where('delivery_channel', $channel)
+            ->where('is_active', true)
+            ->get();
+
+        if ($duplicates->isNotEmpty()) {
+            $existing = $duplicates->map(fn (ProactiveTask $t) => "ID:{$t->id} \"{$t->name}\"")->implode(', ');
+            ProactiveTask::query()->whereIn('id', $duplicates->pluck('id'))->delete();
+
+            $task = ProactiveTask::query()->create([
+                'name' => $name,
+                'schedule' => $schedule,
+                'prompt' => $prompt,
+                'delivery_channel' => $channel,
+                'is_active' => $isActive,
+                'next_run_at' => $nextRun,
+            ]);
+
+            $nextRunFormatted = $nextRun ? $nextRun->format('D M j, g:ia') : 'not scheduled';
+
+            return "Replaced {$duplicates->count()} existing duplicate(s) ({$existing}) with new automation (ID: {$task->id}): \"{$name}\" — {$this->describeCron($schedule)}, via {$channel}. Next run: {$nextRunFormatted}.";
+        }
 
         $task = ProactiveTask::query()->create([
             'name' => $name,
@@ -169,51 +196,92 @@ class ProactiveTaskTool implements Tool
 
     private function deleteTask(Request $request): string
     {
-        $taskId = $request->integer('task_id');
+        $ids = $this->resolveTaskIds($request);
 
-        if ($taskId === 0) {
-            return 'Task not deleted: task_id is required.';
+        if ($ids === null) {
+            return 'Task not deleted: provide task_id or task_ids (comma-separated IDs or "all").';
         }
 
-        $task = ProactiveTask::query()->find($taskId);
-
-        if (! $task instanceof ProactiveTask) {
-            return "Task not deleted: no task found with ID {$taskId}.";
+        if ($ids === []) {
+            return 'No tasks found matching the given IDs.';
         }
 
-        $name = $task->name;
-        $task->delete();
+        $tasks = ProactiveTask::query()->whereIn('id', $ids)->get();
 
-        return "Deleted automation \"{$name}\" (ID: {$taskId}).";
+        if ($tasks->isEmpty()) {
+            return 'No tasks found matching the given IDs.';
+        }
+
+        $names = $tasks->pluck('name')->implode(', ');
+        $count = $tasks->count();
+        ProactiveTask::query()->whereIn('id', $tasks->pluck('id'))->delete();
+
+        return "Deleted {$count} automation(s): {$names}.";
     }
 
     private function toggleTask(Request $request): string
     {
-        $taskId = $request->integer('task_id');
+        $ids = $this->resolveTaskIds($request);
 
-        if ($taskId === 0) {
-            return 'Task not toggled: task_id is required.';
+        if ($ids === null) {
+            return 'Task not toggled: provide task_id or task_ids (comma-separated IDs or "all").';
         }
 
-        $task = ProactiveTask::query()->find($taskId);
-
-        if (! $task instanceof ProactiveTask) {
-            return "Task not toggled: no task found with ID {$taskId}.";
+        if ($ids === []) {
+            return 'No tasks found matching the given IDs.';
         }
 
-        $newState = ! $task->is_active;
-        $updates = ['is_active' => $newState];
+        $tasks = ProactiveTask::query()->whereIn('id', $ids)->get();
 
-        if ($newState) {
-            $cron = new CronExpression($task->schedule);
-            $updates['next_run_at'] = $cron->getNextRunDate();
+        if ($tasks->isEmpty()) {
+            return 'No tasks found matching the given IDs.';
         }
 
-        $task->update($updates);
+        $results = [];
 
-        $status = $newState ? 'activated' : 'paused';
+        foreach ($tasks as $task) {
+            $newState = ! $task->is_active;
+            $updates = ['is_active' => $newState];
 
-        return "Automation \"{$task->name}\" (ID: {$task->id}) {$status}.";
+            if ($newState) {
+                $cron = new CronExpression($task->schedule);
+                $updates['next_run_at'] = $cron->getNextRunDate();
+            }
+
+            $task->update($updates);
+            $status = $newState ? 'activated' : 'paused';
+            $results[] = "ID:{$task->id} \"{$task->name}\" {$status}";
+        }
+
+        return 'Toggled '.count($results)." automation(s):\n".implode("\n", $results);
+    }
+
+    /**
+     * @return int[]|null
+     */
+    private function resolveTaskIds(Request $request): ?array
+    {
+        $singleId = $request->integer('task_id');
+
+        if ($singleId > 0) {
+            return [$singleId];
+        }
+
+        $bulkIds = trim((string) $request->string('task_ids'));
+
+        if ($bulkIds === '') {
+            return null;
+        }
+
+        if (strtolower($bulkIds) === 'all') {
+            return ProactiveTask::query()->pluck('id')->all();
+        }
+
+        return collect(explode(',', $bulkIds))
+            ->map(fn (string $id) => (int) trim($id))
+            ->filter(fn (int $id) => $id > 0)
+            ->values()
+            ->all();
     }
 
     private function describeCron(string $cron): string

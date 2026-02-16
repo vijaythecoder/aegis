@@ -98,9 +98,10 @@ class TelegramAdapter extends BaseAdapter
         return match ($command) {
             '/start' => $this->startResponse(),
             '/new' => $this->newConversationResponse($message),
+            '/reset' => $this->resetConversationResponse($message),
             '/history' => $this->historyResponse($message),
             '/settings' => $this->settingsResponse(),
-            default => 'Unknown command. Try /start, /new, /history, or /settings.',
+            default => 'Unknown command. Try /start, /new, /reset, /history, or /settings.',
         };
     }
 
@@ -151,7 +152,7 @@ class TelegramAdapter extends BaseAdapter
 
     private function startResponse(): string
     {
-        return "*Welcome to Aegis Telegram.*\n\nUse /new to start a fresh conversation, /history to see recent sessions, and /settings for desktop setup.";
+        return "*Welcome to Aegis Telegram.*\n\nUse /new to start a fresh conversation, /reset to clear history, /history to see recent sessions, and /settings for desktop setup.";
     }
 
     private function newConversationResponse(IncomingMessage $message): string
@@ -176,6 +177,25 @@ class TelegramAdapter extends BaseAdapter
         );
 
         return "Started a *new conversation* (#{$conversation->id}).";
+    }
+
+    private function resetConversationResponse(IncomingMessage $message): string
+    {
+        $channel = MessagingChannel::query()
+            ->where('platform', 'telegram')
+            ->where('platform_channel_id', $message->channelId)
+            ->where('active', true)
+            ->first();
+
+        if (! $channel?->conversation_id) {
+            return 'No active conversation to reset. Use /new to start one.';
+        }
+
+        \App\Models\Message::query()
+            ->where('conversation_id', $channel->conversation_id)
+            ->delete();
+
+        return sprintf('Conversation #%d history cleared. The agent will start fresh.', $channel->conversation_id);
     }
 
     private function historyResponse(IncomingMessage $message): string

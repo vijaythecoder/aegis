@@ -3,7 +3,10 @@
 namespace App\Messaging;
 
 use App\Agent\AegisAgent;
+use App\Jobs\ExtractMemoriesJob;
 use App\Messaging\Contracts\MessagingAdapter;
+use Illuminate\Support\Facades\Log;
+use Laravel\Ai\Streaming\Events\TextDelta;
 
 class MessageRouter
 {
@@ -24,9 +27,32 @@ class MessageRouter
 
         $agent = $this->agent ?? app(AegisAgent::class);
 
-        $participant = (object) ['id' => $message->senderId];
+        $agent->forConversation((string) $conversation->id);
 
-        return $agent->continue((string) $conversation->id, $participant)->prompt($message->content)->text;
+        $tools = $agent->tools();
+        $toolCount = is_countable($tools) ? count($tools) : iterator_count($tools);
+
+        Log::debug('[MessageRouter] Routing message', [
+            'platform' => $message->platform,
+            'conversation_id' => $conversation->id,
+            'tool_count' => $toolCount,
+        ]);
+
+        $stream = $agent->stream($message->content);
+
+        $responseText = '';
+
+        foreach ($stream as $event) {
+            if ($event instanceof TextDelta) {
+                $responseText .= $event->delta;
+            }
+        }
+
+        if (trim($responseText) !== '') {
+            ExtractMemoriesJob::dispatch($message->content, $responseText, $conversation->id);
+        }
+
+        return $responseText;
     }
 
     public function registerAdapter(string $platform, MessagingAdapter $adapter): void

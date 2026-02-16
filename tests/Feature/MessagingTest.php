@@ -142,6 +142,87 @@ it('loads messaging channel conversation relationship', function () {
         ->and($channel->conversation->id)->toBe($conversation->id);
 });
 
+it('dispatches memory extraction after routing message', function () {
+    $conversation = Conversation::factory()->create();
+
+    $incoming = new IncomingMessage(
+        platform: 'telegram',
+        channelId: 'channel-123',
+        senderId: 'user-456',
+        content: 'Tell me about automations',
+    );
+
+    $sessionBridge = \Mockery::mock(SessionBridge::class);
+    $sessionBridge->shouldReceive('resolveConversation')
+        ->once()
+        ->andReturn($conversation);
+
+    AegisAgent::fake(['Here is how automations work']);
+
+    \Illuminate\Support\Facades\Queue::fake();
+
+    $router = new MessageRouter($sessionBridge);
+    $response = $router->route($incoming);
+
+    expect($response)->toBe('Here is how automations work');
+
+    \Illuminate\Support\Facades\Queue::assertPushed(\App\Jobs\ExtractMemoriesJob::class);
+});
+
+it('handles telegram reset command by clearing conversation messages', function () {
+    $conversation = Conversation::factory()->create();
+
+    MessagingChannel::query()->create([
+        'platform' => 'telegram',
+        'platform_channel_id' => 'chat-999',
+        'platform_user_id' => 'user-111',
+        'conversation_id' => $conversation->id,
+        'active' => true,
+    ]);
+
+    \App\Models\Message::query()->create([
+        'conversation_id' => $conversation->id,
+        'role' => 'user',
+        'content' => 'old poisoned message',
+    ]);
+    \App\Models\Message::query()->create([
+        'conversation_id' => $conversation->id,
+        'role' => 'assistant',
+        'content' => 'bad response I cannot do that',
+    ]);
+
+    expect(\App\Models\Message::query()->where('conversation_id', $conversation->id)->count())->toBe(2);
+
+    $adapter = app(\App\Messaging\Adapters\TelegramAdapter::class);
+
+    $incoming = new IncomingMessage(
+        platform: 'telegram',
+        channelId: 'chat-999',
+        senderId: 'user-111',
+        content: '/reset',
+    );
+
+    $response = $adapter->handleCommand($incoming);
+
+    expect($response)->toContain('history cleared')
+        ->and(\App\Models\Message::query()->where('conversation_id', $conversation->id)->count())->toBe(0);
+});
+
+it('returns message when reset is called without active conversation', function () {
+    $adapter = app(\App\Messaging\Adapters\TelegramAdapter::class);
+
+    $incoming = new IncomingMessage(
+        platform: 'telegram',
+        channelId: 'nonexistent-channel',
+        senderId: 'user-111',
+        content: '/reset',
+    );
+
+    $response = $adapter->handleCommand($incoming);
+
+    expect($response)->toContain('No active conversation');
+});
+
 it('can parse default incoming request payload shape', function () {
     $adapter = new class implements MessagingAdapter
     {

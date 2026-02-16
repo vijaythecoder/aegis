@@ -178,7 +178,122 @@ it('returns error for non-existent task', function () {
         'task_id' => 999,
     ]));
 
-    expect($result)->toContain('no task found with ID 999');
+    expect($result)->toContain('No tasks found');
+});
+
+it('replaces duplicate active tasks with same schedule and channel', function () {
+    ProactiveTask::query()->create([
+        'name' => 'Morning Digest',
+        'schedule' => '0 8 * * *',
+        'prompt' => 'Send digest.',
+        'delivery_channel' => 'telegram',
+        'is_active' => true,
+    ]);
+
+    $result = (string) $this->tool->handle(new Request([
+        'action' => 'create',
+        'name' => 'Better Morning Digest',
+        'schedule' => '0 8 * * *',
+        'prompt' => 'Send a better digest.',
+        'delivery_channel' => 'telegram',
+    ]));
+
+    expect($result)->toContain('Replaced 1 existing duplicate')
+        ->and($result)->toContain('Morning Digest')
+        ->and($result)->toContain('Better Morning Digest')
+        ->and(ProactiveTask::query()->count())->toBe(1);
+
+    $task = ProactiveTask::query()->first();
+    expect($task->name)->toBe('Better Morning Digest')
+        ->and($task->prompt)->toBe('Send a better digest.');
+});
+
+it('allows duplicate schedule on different channel', function () {
+    ProactiveTask::query()->create([
+        'name' => 'Chat Digest',
+        'schedule' => '0 8 * * *',
+        'prompt' => 'Send digest.',
+        'delivery_channel' => 'chat',
+        'is_active' => true,
+    ]);
+
+    $result = (string) $this->tool->handle(new Request([
+        'action' => 'create',
+        'name' => 'Telegram Digest',
+        'schedule' => '0 8 * * *',
+        'prompt' => 'Send digest.',
+        'delivery_channel' => 'telegram',
+    ]));
+
+    expect($result)->toContain('Automation created')
+        ->and(ProactiveTask::query()->count())->toBe(2);
+});
+
+it('allows creating task when existing duplicate is inactive', function () {
+    ProactiveTask::query()->create([
+        'name' => 'Paused Digest',
+        'schedule' => '0 8 * * *',
+        'prompt' => 'Send digest.',
+        'delivery_channel' => 'telegram',
+        'is_active' => false,
+    ]);
+
+    $result = (string) $this->tool->handle(new Request([
+        'action' => 'create',
+        'name' => 'New Digest',
+        'schedule' => '0 8 * * *',
+        'prompt' => 'Send new digest.',
+        'delivery_channel' => 'telegram',
+    ]));
+
+    expect($result)->toContain('Automation created')
+        ->and(ProactiveTask::query()->count())->toBe(2);
+});
+
+it('bulk deletes tasks by comma-separated IDs', function () {
+    $t1 = ProactiveTask::query()->create(['name' => 'Task 1', 'schedule' => '0 8 * * *', 'prompt' => 'Do 1.']);
+    $t2 = ProactiveTask::query()->create(['name' => 'Task 2', 'schedule' => '0 9 * * *', 'prompt' => 'Do 2.']);
+    $t3 = ProactiveTask::query()->create(['name' => 'Task 3', 'schedule' => '0 10 * * *', 'prompt' => 'Do 3.']);
+
+    $result = (string) $this->tool->handle(new Request([
+        'action' => 'delete',
+        'task_ids' => "{$t1->id},{$t2->id}",
+    ]));
+
+    expect($result)->toContain('Deleted 2 automation(s)')
+        ->and(ProactiveTask::query()->count())->toBe(1)
+        ->and(ProactiveTask::query()->first()->name)->toBe('Task 3');
+});
+
+it('bulk deletes all tasks', function () {
+    ProactiveTask::query()->create(['name' => 'Task 1', 'schedule' => '0 8 * * *', 'prompt' => 'Do 1.']);
+    ProactiveTask::query()->create(['name' => 'Task 2', 'schedule' => '0 9 * * *', 'prompt' => 'Do 2.']);
+
+    $result = (string) $this->tool->handle(new Request([
+        'action' => 'delete',
+        'task_ids' => 'all',
+    ]));
+
+    expect($result)->toContain('Deleted 2 automation(s)')
+        ->and(ProactiveTask::query()->count())->toBe(0);
+});
+
+it('bulk toggles multiple tasks', function () {
+    $t1 = ProactiveTask::query()->create(['name' => 'Active 1', 'schedule' => '0 8 * * *', 'prompt' => 'Do.', 'is_active' => true]);
+    $t2 = ProactiveTask::query()->create(['name' => 'Active 2', 'schedule' => '0 9 * * *', 'prompt' => 'Do.', 'is_active' => true]);
+
+    $result = (string) $this->tool->handle(new Request([
+        'action' => 'toggle',
+        'task_ids' => "{$t1->id},{$t2->id}",
+    ]));
+
+    expect($result)->toContain('Toggled 2 automation(s)')
+        ->and($result)->toContain('paused');
+
+    $t1->refresh();
+    $t2->refresh();
+    expect($t1->is_active)->toBeFalse()
+        ->and($t2->is_active)->toBeFalse();
 });
 
 it('is auto-discovered by the tool registry', function () {
