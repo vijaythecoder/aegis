@@ -8,8 +8,8 @@ return [
     'agent' => [
         'default_provider' => env('AEGIS_DEFAULT_PROVIDER', 'anthropic'),
         'default_model' => env('AEGIS_DEFAULT_MODEL', 'claude-sonnet-4-20250514'),
-        'summary_provider' => env('AEGIS_SUMMARY_PROVIDER', 'anthropic'),
-        'summary_model' => env('AEGIS_SUMMARY_MODEL', 'claude-3-5-haiku-latest'),
+        'summary_provider' => env('AEGIS_SUMMARY_PROVIDER', ''),
+        'summary_model' => env('AEGIS_SUMMARY_MODEL', ''),
         'context_window' => env('AEGIS_CONTEXT_WINDOW', 200000),
         'rate_limit_window_seconds' => env('AEGIS_RATE_LIMIT_WINDOW_SECONDS', 60),
         'rate_limit_max_requests' => env('AEGIS_RATE_LIMIT_MAX_REQUESTS', 120),

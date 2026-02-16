@@ -91,8 +91,8 @@ class ConversationSummaryService
 
     private function generateSummaryViaLlm(string $transcript): ?string
     {
-        $provider = (string) config('aegis.agent.summary_provider', 'anthropic');
-        $model = (string) config('aegis.agent.summary_model', 'claude-3-5-haiku-latest');
+        $provider = (string) config('aegis.agent.summary_provider', config('aegis.agent.default_provider', 'anthropic'));
+        $model = (string) config('aegis.agent.summary_model', '');
 
         try {
             $response = Prism::text()
