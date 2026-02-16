@@ -41,6 +41,10 @@ class BrowserTool implements Tool
 
     public function handle(Request $request): Stringable|string
     {
+        if (! BrowserSession::isPlaywrightAvailable()) {
+            return 'Error: Browser tool is unavailable. The "playwright" npm package is not installed. Install it with: npm install playwright';
+        }
+
         $action = (string) $request->string('action');
 
         try {

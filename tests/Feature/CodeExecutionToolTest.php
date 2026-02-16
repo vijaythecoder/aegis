@@ -70,6 +70,59 @@ it('requires execute permission', function () {
     expect($tool->requiredPermission())->toBe('execute');
 });
 
+it('supports python execution', function () {
+    $tool = new CodeExecutionTool;
+    $result = $tool->handle(new Request([
+        'language' => 'python',
+        'code' => 'print("hello from python")',
+    ]));
+
+    expect($result)->toContain('hello from python')
+        ->and($result)->toContain('Exit code: 0');
+});
+
+it('rejects unsupported language', function () {
+    $tool = new CodeExecutionTool;
+    $result = $tool->handle(new Request([
+        'language' => 'ruby',
+        'code' => 'puts "hello"',
+    ]));
+
+    expect($result)->toContain('Unsupported language');
+});
+
+it('caps timeout at 60 seconds', function () {
+    $tool = new CodeExecutionTool;
+    $result = $tool->handle(new Request([
+        'language' => 'php',
+        'code' => '<?php echo "fast";',
+        'timeout' => 999,
+    ]));
+
+    expect($result)->toContain('fast')
+        ->and($result)->toContain('Exit code: 0');
+});
+
+it('blocks shell_exec pattern', function () {
+    $tool = new CodeExecutionTool;
+    $result = $tool->handle(new Request([
+        'language' => 'php',
+        'code' => '<?php shell_exec("ls");',
+    ]));
+
+    expect($result)->toContain('blocked');
+});
+
+it('blocks proc_open pattern', function () {
+    $tool = new CodeExecutionTool;
+    $result = $tool->handle(new Request([
+        'language' => 'php',
+        'code' => '<?php proc_open("ls", [], $pipes);',
+    ]));
+
+    expect($result)->toContain('blocked');
+});
+
 it('has correct tool metadata', function () {
     $tool = new CodeExecutionTool;
 

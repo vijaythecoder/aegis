@@ -4,6 +4,14 @@ use App\Tools\BrowserSession;
 use App\Tools\BrowserTool;
 use Laravel\Ai\Tools\Request;
 
+beforeEach(function () {
+    BrowserSession::fakePlaywrightAvailable(true);
+});
+
+afterEach(function () {
+    BrowserSession::resetPlaywrightCache();
+});
+
 it('navigates to url and returns page metadata', function () {
     $session = Mockery::mock(BrowserSession::class);
     $session->shouldReceive('navigate')
@@ -129,4 +137,100 @@ it('gets text content from selector', function () {
     ]));
 
     expect($result)->toBe('Example Domain');
+});
+
+it('blocks javascript scheme urls', function () {
+    $result = (string) app(BrowserTool::class)->handle(new Request([
+        'action' => 'navigate',
+        'url' => 'javascript:alert(1)',
+    ]));
+
+    expect(strtolower($result))->toContain('blocked');
+});
+
+it('blocks data scheme urls', function () {
+    $result = (string) app(BrowserTool::class)->handle(new Request([
+        'action' => 'navigate',
+        'url' => 'data:text/html,<h1>test</h1>',
+    ]));
+
+    expect(strtolower($result))->toContain('blocked');
+});
+
+it('blocks localhost urls by default', function () {
+    $result = (string) app(BrowserTool::class)->handle(new Request([
+        'action' => 'navigate',
+        'url' => 'http://localhost:3000',
+    ]));
+
+    expect(strtolower($result))->toContain('blocked');
+});
+
+it('blocks 127.0.0.1 urls by default', function () {
+    $result = (string) app(BrowserTool::class)->handle(new Request([
+        'action' => 'navigate',
+        'url' => 'http://127.0.0.1:8080',
+    ]));
+
+    expect(strtolower($result))->toContain('blocked');
+});
+
+it('returns error when playwright is not available', function () {
+    BrowserSession::fakePlaywrightAvailable(false);
+
+    $result = (string) app(BrowserTool::class)->handle(new Request([
+        'action' => 'navigate',
+        'url' => 'https://example.com',
+    ]));
+
+    expect($result)->toContain('unavailable')
+        ->and($result)->toContain('playwright');
+});
+
+it('returns error for unknown action', function () {
+    $result = (string) app(BrowserTool::class)->handle(new Request([
+        'action' => 'nonexistent',
+    ]));
+
+    expect($result)->toContain('Unknown browser action');
+});
+
+it('returns error when navigate url is missing', function () {
+    $result = (string) app(BrowserTool::class)->handle(new Request([
+        'action' => 'navigate',
+    ]));
+
+    expect($result)->toContain('URL is required');
+});
+
+it('returns error when click selector is missing', function () {
+    $result = (string) app(BrowserTool::class)->handle(new Request([
+        'action' => 'click',
+    ]));
+
+    expect($result)->toContain('Selector is required');
+});
+
+it('returns error when fill selector is missing', function () {
+    $result = (string) app(BrowserTool::class)->handle(new Request([
+        'action' => 'fill',
+    ]));
+
+    expect($result)->toContain('Selector is required');
+});
+
+it('returns error when get_text selector is missing', function () {
+    $result = (string) app(BrowserTool::class)->handle(new Request([
+        'action' => 'get_text',
+    ]));
+
+    expect($result)->toContain('Selector is required');
+});
+
+it('returns error when evaluate javascript is missing', function () {
+    $result = (string) app(BrowserTool::class)->handle(new Request([
+        'action' => 'evaluate',
+    ]));
+
+    expect($result)->toContain('JavaScript is required');
 });

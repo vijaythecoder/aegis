@@ -8,6 +8,8 @@ class BrowserSession
 {
     private static array $instances = [];
 
+    private static ?bool $playwrightAvailable = null;
+
     private ?Process $process = null;
 
     private array $tabs = [];
@@ -49,10 +51,43 @@ class BrowserSession
         unset(self::$instances[$key]);
     }
 
+    public static function isPlaywrightAvailable(): bool
+    {
+        if (self::$playwrightAvailable !== null) {
+            return self::$playwrightAvailable;
+        }
+
+        $check = new Process(['node', '-e', "try { require.resolve('playwright'); process.stdout.write('1'); } catch(e) { process.stdout.write('0'); }"]);
+        $check->setTimeout(10);
+
+        try {
+            $check->run();
+            self::$playwrightAvailable = trim($check->getOutput()) === '1';
+        } catch (\Throwable) {
+            self::$playwrightAvailable = false;
+        }
+
+        return self::$playwrightAvailable;
+    }
+
+    public static function resetPlaywrightCache(): void
+    {
+        self::$playwrightAvailable = null;
+    }
+
+    public static function fakePlaywrightAvailable(bool $available = true): void
+    {
+        self::$playwrightAvailable = $available;
+    }
+
     public function launch(): void
     {
         if ($this->launched) {
             return;
+        }
+
+        if (! self::isPlaywrightAvailable()) {
+            throw new \RuntimeException('Browser tool requires the "playwright" npm package. Install it with: npm install playwright');
         }
 
         $this->startBridgeProcess();

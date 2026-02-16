@@ -163,7 +163,7 @@ class CodeExecutionTool implements Tool
     private function findPython(): ?string
     {
         foreach (['python3', 'python'] as $bin) {
-            $result = Process::quietly()->run("which {$bin}");
+            $result = Process::run("which {$bin}");
 
             if ($result->successful() && trim($result->output()) !== '') {
                 return trim($result->output());
