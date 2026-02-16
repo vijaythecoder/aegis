@@ -1,6 +1,8 @@
 <div
     class="flex flex-col h-full"
     x-data="{
+        agentPhase: 'idle',
+        agentDetail: '',
         scrollToBottom() {
             $nextTick(() => {
                 const el = document.getElementById('chat-messages');
@@ -15,11 +17,26 @@
         },
         stopGenerating() {
             Livewire.navigate(window.location.href);
+        },
+        phaseIcon(phase) {
+            const icons = {
+                thinking: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z',
+                planning: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2',
+                executing: 'M13 10V3L4 14h7v7l9-11h-7z',
+                reflecting: 'M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z',
+                retrying: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15',
+            };
+            return icons[phase] || icons.thinking;
+        },
+        phaseLabel(phase) {
+            const labels = { planning: 'Planning', executing: 'Executing', reflecting: 'Reviewing', retrying: 'Improving' };
+            return labels[phase] || 'Thinking';
         }
     }"
     x-init="scrollToBottom()"
     x-on:message-sent.window="scrollToBottom(); focusInput()"
     x-on:conversation-selected.window="setTimeout(() => { scrollToBottom(); focusInput(); }, 100)"
+    x-on:agent-status-changed.window="agentPhase = $event.detail.state || 'idle'; agentDetail = $event.detail.detail || ''"
 >
     @if ($conversationId === null && $messages->isEmpty() && $pendingMessage === '')
         <div class="flex-1 flex items-center justify-center p-8">
@@ -117,10 +134,19 @@
                         })"
                     >
                         <div class="max-w-[85%] rounded-2xl rounded-bl-md px-4 py-3 bg-aegis-surface border border-aegis-border text-aegis-text text-sm leading-relaxed">
-                            <div x-show="!streaming" class="flex items-center gap-1.5">
-                                <span class="w-1.5 h-1.5 rounded-full bg-aegis-accent animate-bounce" style="animation-delay: 0ms"></span>
-                                <span class="w-1.5 h-1.5 rounded-full bg-aegis-accent animate-bounce" style="animation-delay: 150ms"></span>
-                                <span class="w-1.5 h-1.5 rounded-full bg-aegis-accent animate-bounce" style="animation-delay: 300ms"></span>
+                            <div x-show="!streaming" x-cloak>
+                                <div x-show="agentPhase !== 'idle' && agentPhase !== 'thinking'" class="flex items-center gap-2">
+                                    <svg class="w-4 h-4 text-aegis-accent animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path :d="phaseIcon(agentPhase)"/>
+                                    </svg>
+                                    <span class="text-xs font-medium text-aegis-accent" x-text="phaseLabel(agentPhase)"></span>
+                                    <span class="text-xs text-aegis-text-dim" x-show="agentDetail" x-text="agentDetail"></span>
+                                </div>
+                                <div x-show="agentPhase === 'idle' || agentPhase === 'thinking'" class="flex items-center gap-1.5">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-aegis-accent animate-bounce" style="animation-delay: 0ms"></span>
+                                    <span class="w-1.5 h-1.5 rounded-full bg-aegis-accent animate-bounce" style="animation-delay: 150ms"></span>
+                                    <span class="w-1.5 h-1.5 rounded-full bg-aegis-accent animate-bounce" style="animation-delay: 300ms"></span>
+                                </div>
                             </div>
                             <div id="stream-raw" class="hidden" wire:stream="streamedResponse"></div>
                             <div id="stream-rendered" class="markdown-body text-sm max-w-none"></div>
