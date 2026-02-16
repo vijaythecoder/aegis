@@ -6,6 +6,8 @@ use App\Agent\ModelCapabilities;
 use App\Agent\ProviderManager;
 use App\Marketplace\MarketplaceService;
 use App\Marketplace\PluginRegistry;
+use App\Memory\MemoryService;
+use App\Memory\UserProfileService;
 use App\Models\AuditLog;
 use App\Models\Conversation;
 use App\Models\Memory;
@@ -232,9 +234,27 @@ class Settings extends Component
         $this->flash('Permission removed.', 'success');
     }
 
+    public function deleteMemory(int $id): void
+    {
+        app(MemoryService::class)->delete($id);
+        $this->flash('Memory deleted.', 'success');
+    }
+
+    public function refreshUserProfile(): void
+    {
+        $profile = app(UserProfileService::class)->refreshProfile();
+
+        if ($profile !== null) {
+            $this->flash('User profile refreshed.', 'success');
+        } else {
+            $this->flash('No memories available to build profile.', 'error');
+        }
+    }
+
     public function clearMemories(): void
     {
         Memory::query()->delete();
+        app(UserProfileService::class)->invalidate();
         $this->flash('All memories cleared.', 'success');
     }
 
@@ -273,6 +293,8 @@ class Settings extends Component
             'marketplacePlugins' => $marketplacePlugins,
             'installedPlugins' => $this->installedPlugins(),
             'marketplaceUpdates' => $marketplaceUpdates,
+            'memories' => $this->activeTab === 'memory' ? app(MemoryService::class)->all() : collect(),
+            'userProfile' => $this->activeTab === 'memory' ? app(UserProfileService::class)->getProfile() : null,
         ]);
     }
 

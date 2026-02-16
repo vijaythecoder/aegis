@@ -300,6 +300,69 @@
                         </button>
                     </div>
                 </div>
+
+                {{-- User Profile Preview --}}
+                @if ($userProfile)
+                    <div class="rounded-xl border border-aegis-border bg-aegis-850 p-5 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <h4 class="text-sm font-semibold text-aegis-text">User Profile (Layer 0)</h4>
+                            <button
+                                type="button"
+                                wire:click="refreshUserProfile"
+                                class="px-3 py-1.5 rounded-lg text-xs font-medium text-aegis-text-dim border border-aegis-border bg-aegis-surface hover:bg-aegis-surface-hover transition-colors"
+                            >
+                                Refresh
+                            </button>
+                        </div>
+                        <p class="text-xs text-aegis-text-dim leading-relaxed whitespace-pre-line">{{ $userProfile }}</p>
+                    </div>
+                @endif
+
+                {{-- Stored Memories --}}
+                <div class="rounded-xl border border-aegis-border bg-aegis-850 p-5 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h4 class="text-sm font-semibold text-aegis-text">Stored Memories</h4>
+                            <p class="text-xs text-aegis-text-dim mt-0.5">{{ $memories->count() }} memories stored</p>
+                        </div>
+                    </div>
+
+                    @if ($memories->isEmpty())
+                        <p class="text-sm text-aegis-text-dim py-4 text-center">No memories stored yet. Chat with Aegis and it will remember important details.</p>
+                    @else
+                        <div class="space-y-2 max-h-96 overflow-y-auto">
+                            @foreach ($memories as $memory)
+                                <div class="flex items-start justify-between gap-3 rounded-lg border border-aegis-border bg-aegis-900/50 px-3 py-2.5">
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex items-center gap-2">
+                                            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium
+                                                {{ $memory->type->value === 'fact' ? 'bg-blue-500/10 text-blue-400' : '' }}
+                                                {{ $memory->type->value === 'preference' ? 'bg-purple-500/10 text-purple-400' : '' }}
+                                                {{ $memory->type->value === 'note' ? 'bg-amber-500/10 text-amber-400' : '' }}
+                                            ">{{ $memory->type->value }}</span>
+                                            <span class="text-xs font-mono text-aegis-text-dim truncate">{{ $memory->key }}</span>
+                                            <span class="text-[10px] text-aegis-text-dim/50">{{ number_format($memory->confidence, 2) }}</span>
+                                        </div>
+                                        <p class="text-sm text-aegis-text mt-1 break-words">{{ $memory->value }}</p>
+                                        @if ($memory->previous_value)
+                                            <p class="text-[10px] text-aegis-text-dim/50 mt-0.5 line-through">{{ $memory->previous_value }}</p>
+                                        @endif
+                                    </div>
+                                    <button
+                                        type="button"
+                                        wire:click="deleteMemory({{ $memory->id }})"
+                                        wire:confirm="Delete this memory?"
+                                        class="shrink-0 text-red-400/60 hover:text-red-400 transition-colors p-1"
+                                    >
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                        </svg>
+                                    </button>
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
             </div>
         @endif
 
