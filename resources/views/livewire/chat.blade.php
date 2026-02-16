@@ -10,19 +10,16 @@
         focusInput() {
             $nextTick(() => {
                 const ta = this.$refs.messageInput;
-                if (ta) { ta.disabled = false; ta.focus(); }
+                if (ta) ta.focus();
             });
         },
-        observeStream() {
-            const target = document.getElementById('stream-target');
-            if (!target) return;
-            const observer = new MutationObserver(() => this.scrollToBottom());
-            observer.observe(target, { childList: true, characterData: true, subtree: true });
+        stopGenerating() {
+            Livewire.navigate(window.location.href);
         }
     }"
     x-init="scrollToBottom()"
     x-on:message-sent.window="scrollToBottom(); focusInput()"
-    x-on:conversation-selected.window="setTimeout(() => scrollToBottom(), 100)"
+    x-on:conversation-selected.window="setTimeout(() => { scrollToBottom(); focusInput(); }, 100)"
 >
     @if ($conversationId === null && $messages->isEmpty() && $pendingMessage === '')
         <div class="flex-1 flex items-center justify-center p-8">
@@ -107,14 +104,16 @@
                         class="flex justify-start"
                         x-data="{ streaming: false }"
                         x-init="$nextTick(() => {
-                            observeStream();
-                            const target = document.getElementById('stream-target');
-                            if (target) {
-                                new MutationObserver((mutations, obs) => {
-                                    streaming = true;
-                                    obs.disconnect();
-                                }).observe(target, { childList: true, characterData: true, subtree: true });
-                            }
+                            const raw = document.getElementById('stream-raw');
+                            const rendered = document.getElementById('stream-rendered');
+                            if (!raw || !rendered) return;
+                            const observer = new MutationObserver(() => {
+                                streaming = true;
+                                const text = raw.textContent || '';
+                                rendered.innerHTML = typeof window.markedParse === 'function' ? window.markedParse(text) : text;
+                                scrollToBottom();
+                            });
+                            observer.observe(raw, { childList: true, characterData: true, subtree: true });
                         })"
                     >
                         <div class="max-w-[85%] rounded-2xl rounded-bl-md px-4 py-3 bg-aegis-surface border border-aegis-border text-aegis-text text-sm leading-relaxed">
@@ -123,7 +122,8 @@
                                 <span class="w-1.5 h-1.5 rounded-full bg-aegis-accent animate-bounce" style="animation-delay: 150ms"></span>
                                 <span class="w-1.5 h-1.5 rounded-full bg-aegis-accent animate-bounce" style="animation-delay: 300ms"></span>
                             </div>
-                            <div id="stream-target" class="markdown-body text-sm max-w-none" wire:stream="streamedResponse"></div>
+                            <div id="stream-raw" class="hidden" wire:stream="streamedResponse"></div>
+                            <div id="stream-rendered" class="markdown-body text-sm max-w-none"></div>
                         </div>
                     </div>
                 @endif
@@ -138,24 +138,36 @@
                     <textarea
                         x-ref="messageInput"
                         wire:model="message"
-                        x-on:keydown.enter.prevent="if (!$event.shiftKey) $wire.sendMessage()"
+                        x-on:keydown.enter.prevent="if (!$event.shiftKey && !$wire.isThinking) { $wire.sendMessage(); $nextTick(() => { $el.style.height = 'auto'; }) }"
                         placeholder="Message Aegis..."
                         rows="1"
-                        @if ($isThinking) disabled @endif
-                        class="flex-1 resize-none bg-transparent text-sm text-aegis-text placeholder-aegis-text-dim focus:outline-none px-2 py-1.5 max-h-40 overflow-y-auto disabled:opacity-50"
+                        class="flex-1 resize-none bg-transparent text-sm text-aegis-text placeholder-aegis-text-dim focus:outline-none px-2 py-1.5 max-h-40 overflow-y-auto"
                         x-data="{ resize() { $el.style.height = 'auto'; $el.style.height = Math.min($el.scrollHeight, 160) + 'px'; } }"
                         x-on:input="resize()"
+                        x-effect="if (!$wire.isThinking) $nextTick(() => $el.focus())"
                     ></textarea>
-                    <button
-                        type="submit"
-                        @if ($isThinking) disabled @endif
-                        class="shrink-0 p-2 rounded-lg bg-aegis-accent text-aegis-900 hover:bg-aegis-glow disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                    >
-                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                            <line x1="22" y1="2" x2="11" y2="13"/>
-                            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                        </svg>
-                    </button>
+                    @if ($isThinking)
+                        <button
+                            type="button"
+                            x-on:click="stopGenerating()"
+                            class="shrink-0 p-2 rounded-lg bg-red-500/20 text-red-300 hover:bg-red-500/30 transition-colors"
+                            title="Stop generating"
+                        >
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                                <rect x="6" y="6" width="12" height="12" rx="2"/>
+                            </svg>
+                        </button>
+                    @else
+                        <button
+                            type="submit"
+                            class="shrink-0 p-2 rounded-lg bg-aegis-accent text-aegis-900 hover:bg-aegis-glow transition-colors"
+                        >
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="22" y1="2" x2="11" y2="13"/>
+                                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                            </svg>
+                        </button>
+                    @endif
                 </div>
             </form>
         </div>

@@ -37,7 +37,7 @@
     {{-- Tab Navigation --}}
     <div x-data="{ tab: $wire.entangle('activeTab') }" class="space-y-6">
         <nav class="flex gap-1 p-1 rounded-xl bg-aegis-850 border border-aegis-border">
-            @foreach (['providers' => 'Providers', 'marketplace' => 'Marketplace', 'security' => 'Security', 'general' => 'General'] as $key => $label)
+            @foreach (['providers' => 'Providers', 'memory' => 'Memory', 'marketplace' => 'Marketplace', 'security' => 'Security', 'general' => 'General'] as $key => $label)
                 <button
                     type="button"
                     wire:click="setTab('{{ $key }}')"
@@ -167,11 +167,11 @@
                 <div class="rounded-xl border border-aegis-border bg-aegis-850 p-5 space-y-4">
                     <h4 class="text-sm font-semibold text-aegis-text">Defaults</h4>
 
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div>
                             <label class="block text-xs font-medium text-aegis-text-dim mb-1.5">Default Provider</label>
                             <select
-                                wire:model="defaultProvider"
+                                wire:model.live="defaultProvider"
                                 class="w-full px-3 py-2 rounded-lg bg-aegis-900 border border-aegis-border text-sm text-aegis-text focus:outline-none focus:border-aegis-accent/40 focus:ring-1 focus:ring-aegis-accent/20 transition-colors"
                             >
                                 @foreach ($configuredProviders as $id => $name)
@@ -181,12 +181,29 @@
                         </div>
                         <div>
                             <label class="block text-xs font-medium text-aegis-text-dim mb-1.5">Default Model</label>
-                            <input
-                                type="text"
+                            <select
                                 wire:model="defaultModel"
-                                placeholder="e.g. claude-sonnet-4-20250514"
-                                class="w-full px-3 py-2 rounded-lg bg-aegis-900 border border-aegis-border text-sm text-aegis-text placeholder:text-aegis-text-dim/40 focus:outline-none focus:border-aegis-accent/40 focus:ring-1 focus:ring-aegis-accent/20 transition-colors"
-                            />
+                                class="w-full px-3 py-2 rounded-lg bg-aegis-900 border border-aegis-border text-sm text-aegis-text focus:outline-none focus:border-aegis-accent/40 focus:ring-1 focus:ring-aegis-accent/20 transition-colors"
+                            >
+                                @foreach ($this->availableModels() as $modelId)
+                                    <option value="{{ $modelId }}">{{ $modelId }}</option>
+                                @endforeach
+                                @if ($this->availableModels() === [])
+                                    <option value="" disabled>No models available</option>
+                                @endif
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-aegis-text-dim mb-1.5">Model Role</label>
+                            <select
+                                wire:model="modelRole"
+                                class="w-full px-3 py-2 rounded-lg bg-aegis-900 border border-aegis-border text-sm text-aegis-text focus:outline-none focus:border-aegis-accent/40 focus:ring-1 focus:ring-aegis-accent/20 transition-colors"
+                            >
+                                <option value="default">Default</option>
+                                <option value="smartest">Smartest</option>
+                                <option value="cheapest">Cheapest</option>
+                            </select>
+                            <p class="text-[11px] text-aegis-text-dim mt-1">SDK auto-selects the best model for this role.</p>
                         </div>
                     </div>
 
@@ -197,6 +214,89 @@
                             class="px-4 py-2 rounded-lg text-xs font-semibold text-aegis-accent border border-aegis-accent/30 bg-aegis-accent/10 hover:bg-aegis-accent/20 transition-colors"
                         >
                             Save Defaults
+                        </button>
+                    </div>
+                </div>
+            </div>
+        @endif
+
+        {{-- ═══ Memory & Embeddings Tab ═══ --}}
+        @if ($activeTab === 'memory')
+            <div class="space-y-8">
+
+                <div>
+                    <h3 class="text-lg font-display font-bold text-aegis-text">Memory & Embeddings</h3>
+                    <p class="text-sm text-aegis-text-dim mt-1">Configure how Aegis generates and stores semantic embeddings for cross-conversation memory.</p>
+                </div>
+
+                <div class="rounded-xl border border-aegis-border bg-aegis-850 p-5 space-y-4">
+                    <h4 class="text-sm font-semibold text-aegis-text">Embedding Provider</h4>
+
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-medium text-aegis-text-dim mb-1.5">Provider</label>
+                            <select
+                                wire:model.live="embeddingProvider"
+                                class="w-full px-3 py-2 rounded-lg bg-aegis-900 border border-aegis-border text-sm text-aegis-text focus:outline-none focus:border-aegis-accent/40 focus:ring-1 focus:ring-aegis-accent/20 transition-colors"
+                            >
+                                <option value="ollama">Ollama (Local)</option>
+                                <option value="openai">OpenAI (Cloud)</option>
+                                <option value="disabled">Disabled</option>
+                            </select>
+                        </div>
+
+                        @if ($embeddingProvider !== 'disabled')
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-xs font-medium text-aegis-text-dim mb-1.5">Model</label>
+                                    <input
+                                        type="text"
+                                        wire:model="embeddingModel"
+                                        placeholder="{{ $embeddingProvider === 'ollama' ? 'nomic-embed-text' : 'text-embedding-3-small' }}"
+                                        class="w-full px-3 py-2 rounded-lg bg-aegis-900 border border-aegis-border text-sm text-aegis-text placeholder:text-aegis-text-dim/40 focus:outline-none focus:border-aegis-accent/40 focus:ring-1 focus:ring-aegis-accent/20 transition-colors"
+                                    />
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-aegis-text-dim mb-1.5">Dimensions</label>
+                                    <input
+                                        type="number"
+                                        wire:model="embeddingDimensions"
+                                        min="64"
+                                        max="4096"
+                                        class="w-full px-3 py-2 rounded-lg bg-aegis-900 border border-aegis-border text-sm text-aegis-text focus:outline-none focus:border-aegis-accent/40 focus:ring-1 focus:ring-aegis-accent/20 transition-colors"
+                                    />
+                                </div>
+                            </div>
+                        @endif
+
+                        @if ($embeddingProvider === 'disabled')
+                            <div class="rounded-lg border border-amber-400/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-300">
+                                Embeddings are disabled. Memory search will use keyword matching only (FTS5).
+                            </div>
+                        @endif
+
+                        @if ($embeddingProvider === 'ollama')
+                            <div class="rounded-lg border border-aegis-border bg-aegis-900/50 px-4 py-3 text-xs text-aegis-text-dim space-y-1">
+                                <p>Ollama runs locally on your machine. Make sure it's installed and running.</p>
+                                <p class="font-mono">ollama pull {{ $embeddingModel ?: 'nomic-embed-text' }}</p>
+                            </div>
+                        @endif
+                    </div>
+
+                    <div class="flex items-center justify-end gap-2 pt-2">
+                        <button
+                            type="button"
+                            wire:click="testEmbeddingConnection"
+                            class="px-3 py-2 rounded-lg text-xs font-medium text-aegis-text-dim border border-aegis-border bg-aegis-surface hover:bg-aegis-surface-hover transition-colors"
+                        >
+                            Test Connection
+                        </button>
+                        <button
+                            type="button"
+                            wire:click="saveEmbeddingSettings"
+                            class="px-4 py-2 rounded-lg text-xs font-semibold text-aegis-accent border border-aegis-accent/30 bg-aegis-accent/10 hover:bg-aegis-accent/20 transition-colors"
+                        >
+                            Save Settings
                         </button>
                     </div>
                 </div>

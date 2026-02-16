@@ -1,6 +1,6 @@
 <?php
 
-use App\Agent\AgentOrchestrator;
+use App\Agent\AegisAgent;
 use App\Enums\MessageRole;
 use App\Livewire\AgentStatus;
 use App\Livewire\Chat;
@@ -72,12 +72,10 @@ it('enters thinking state and stores pending message on send', function () {
         ->assertDispatched('agent-status-changed');
 });
 
-it('generates response via orchestrator', function () {
+it('generates response via agent', function () {
     $conversation = Conversation::factory()->create();
 
-    $this->mock(AgentOrchestrator::class, function ($mock) {
-        $mock->shouldReceive('respondStreaming')->once()->andReturn('AI response here');
-    });
+    AegisAgent::fake(['AI response here']);
 
     Livewire::test(Chat::class, ['conversationId' => $conversation->id])
         ->set('pendingMessage', 'Test question')

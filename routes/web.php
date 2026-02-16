@@ -42,4 +42,8 @@ Route::get('/chat/{conversation}', fn (int $conversation) => view('chat', ['conv
 
 Route::get('/settings', fn () => view('settings'))->name('settings');
 
+Route::get('/knowledge', fn () => view('knowledge'))->name('knowledge');
+
+Route::get('/security', fn () => view('security'))->name('security');
+
 Route::get('/mobile/chat', fn () => view('mobile.chat'))->name('mobile.chat');

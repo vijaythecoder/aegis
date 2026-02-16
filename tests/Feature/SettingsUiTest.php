@@ -235,3 +235,63 @@ it('has export data button that is disabled', function () {
         ->call('setTab', 'general')
         ->assertSee('Coming soon');
 });
+
+// ── Memory & Embeddings Tab ──────────────────────────────────
+
+it('switches to memory tab', function () {
+    Livewire::test(Settings::class)
+        ->call('setTab', 'memory')
+        ->assertSet('activeTab', 'memory')
+        ->assertSee('Embedding Provider');
+});
+
+it('shows embedding provider dropdown', function () {
+    Livewire::test(Settings::class)
+        ->call('setTab', 'memory')
+        ->assertSee('Embedding Provider')
+        ->assertSee('Ollama (Local)')
+        ->assertSee('OpenAI (Cloud)')
+        ->assertSee('Disabled');
+});
+
+it('saves embedding settings', function () {
+    Livewire::test(Settings::class)
+        ->call('setTab', 'memory')
+        ->set('embeddingProvider', 'openai')
+        ->set('embeddingModel', 'text-embedding-3-small')
+        ->set('embeddingDimensions', 1536)
+        ->call('saveEmbeddingSettings')
+        ->assertSet('flashMessage', 'Embedding settings saved.');
+
+    expect(Setting::query()->where('group', 'memory')->where('key', 'embedding_provider')->value('value'))
+        ->toBe('openai');
+    expect(Setting::query()->where('group', 'memory')->where('key', 'embedding_model')->value('value'))
+        ->toBe('text-embedding-3-small');
+    expect(Setting::query()->where('group', 'memory')->where('key', 'embedding_dimensions')->value('value'))
+        ->toBe('1536');
+});
+
+it('shows disabled info when embeddings are disabled', function () {
+    Livewire::test(Settings::class)
+        ->call('setTab', 'memory')
+        ->set('embeddingProvider', 'disabled')
+        ->assertSee('keyword matching only');
+});
+
+it('shows ollama instructions when ollama is selected', function () {
+    Livewire::test(Settings::class)
+        ->call('setTab', 'memory')
+        ->set('embeddingProvider', 'ollama')
+        ->assertSee('ollama pull');
+});
+
+it('loads saved embedding settings on mount', function () {
+    Setting::query()->create(['group' => 'memory', 'key' => 'embedding_provider', 'value' => 'openai', 'is_encrypted' => false]);
+    Setting::query()->create(['group' => 'memory', 'key' => 'embedding_model', 'value' => 'text-embedding-3-small', 'is_encrypted' => false]);
+    Setting::query()->create(['group' => 'memory', 'key' => 'embedding_dimensions', 'value' => '1536', 'is_encrypted' => false]);
+
+    Livewire::test(Settings::class)
+        ->assertSet('embeddingProvider', 'openai')
+        ->assertSet('embeddingModel', 'text-embedding-3-small')
+        ->assertSet('embeddingDimensions', 1536);
+});

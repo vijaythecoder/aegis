@@ -2,11 +2,12 @@
 
 namespace App\Livewire;
 
-use App\Agent\AgentOrchestrator;
-use App\Agent\StreamBuffer;
+use App\Agent\AegisAgent;
+use App\Jobs\ExtractMemoriesJob;
 use App\Memory\ConversationService;
 use App\Memory\MessageService;
 use Illuminate\Support\Str;
+use Laravel\Ai\Streaming\Events\TextDelta;
 use Livewire\Attributes\On;
 use Livewire\Component;
 
@@ -57,19 +58,24 @@ class Chat extends Component
         $this->pendingMessage = '';
 
         try {
-            $orchestrator = app(AgentOrchestrator::class);
-            $buffer = new StreamBuffer((string) $this->conversationId);
+            $agent = app(AegisAgent::class);
+            $agent->forConversation($this->conversationId);
+            $stream = $agent->stream($text);
 
-            $orchestrator->respondStreaming(
-                message: $text,
-                conversationId: $this->conversationId,
-                buffer: $buffer,
-                onChunk: function (string $chunk) {
-                    $this->stream(to: 'streamedResponse', content: $chunk);
-                },
-            );
+            $assistantResponse = '';
+
+            foreach ($stream as $event) {
+                if ($event instanceof TextDelta) {
+                    $assistantResponse .= $event->delta;
+                    $this->stream(to: 'streamedResponse', content: $event->delta);
+                }
+            }
 
             $this->generateTitleIfNeeded($text);
+
+            if (trim($assistantResponse) !== '') {
+                ExtractMemoriesJob::dispatch($text, $assistantResponse, $this->conversationId);
+            }
         } finally {
             $this->isThinking = false;
             $this->dispatch('agent-status-changed', state: 'idle');

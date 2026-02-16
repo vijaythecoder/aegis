@@ -2,6 +2,7 @@
 
 namespace App\Livewire;
 
+use App\Agent\ModelCapabilities;
 use App\Agent\ProviderManager;
 use App\Marketplace\MarketplaceService;
 use App\Marketplace\PluginRegistry;
@@ -36,6 +37,14 @@ class Settings extends Component
 
     public string $marketplaceQuery = '';
 
+    public string $modelRole = 'default';
+
+    public string $embeddingProvider = '';
+
+    public string $embeddingModel = '';
+
+    public int $embeddingDimensions = 768;
+
     public function mount(): void
     {
         $this->defaultProvider = $this->getSettingValue('agent', 'default_provider')
@@ -43,6 +52,17 @@ class Settings extends Component
 
         $this->defaultModel = $this->getSettingValue('agent', 'default_model')
             ?? config('aegis.agent.default_model', 'claude-sonnet-4-20250514');
+
+        $this->modelRole = $this->getSettingValue('agent', 'model_role') ?? 'default';
+
+        $this->embeddingProvider = $this->getSettingValue('memory', 'embedding_provider')
+            ?? config('aegis.memory.embedding_provider', 'ollama');
+
+        $this->embeddingModel = $this->getSettingValue('memory', 'embedding_model')
+            ?? config('aegis.memory.embedding_model', 'nomic-embed-text');
+
+        $this->embeddingDimensions = (int) ($this->getSettingValue('memory', 'embedding_dimensions')
+            ?? config('aegis.memory.embedding_dimensions', 768));
     }
 
     public function setTab(string $tab): void
@@ -93,11 +113,75 @@ class Settings extends Component
         }
     }
 
+    public function updatedDefaultProvider(): void
+    {
+        $models = $this->availableModels();
+        $this->defaultModel = $models[0] ?? '';
+    }
+
+    public function availableModels(): array
+    {
+        $capabilities = app(ModelCapabilities::class);
+        $models = $capabilities->modelsForProvider($this->defaultProvider);
+
+        if ($this->defaultProvider === 'ollama' && $models === []) {
+            $models = app(ProviderManager::class)->detectOllama();
+        }
+
+        return $models;
+    }
+
     public function saveDefaults(): void
     {
         $this->saveSetting('agent', 'default_provider', $this->defaultProvider);
         $this->saveSetting('agent', 'default_model', $this->defaultModel);
-        $this->flash('Default provider and model saved.', 'success');
+        $this->saveSetting('agent', 'model_role', $this->modelRole);
+        $this->flash('Default provider, model, and role saved.', 'success');
+    }
+
+    public function saveEmbeddingSettings(): void
+    {
+        $this->saveSetting('memory', 'embedding_provider', $this->embeddingProvider);
+        $this->saveSetting('memory', 'embedding_model', $this->embeddingModel);
+        $this->saveSetting('memory', 'embedding_dimensions', (string) $this->embeddingDimensions);
+
+        config([
+            'aegis.memory.embedding_provider' => $this->embeddingProvider,
+            'aegis.memory.embedding_model' => $this->embeddingModel,
+            'aegis.memory.embedding_dimensions' => $this->embeddingDimensions,
+        ]);
+
+        $this->flash('Embedding settings saved.', 'success');
+    }
+
+    public function testEmbeddingConnection(): void
+    {
+        if ($this->embeddingProvider === 'disabled') {
+            $this->flash('Embeddings are disabled.', 'error');
+
+            return;
+        }
+
+        try {
+            $service = app(\App\Memory\EmbeddingService::class);
+
+            config([
+                'aegis.memory.embedding_provider' => $this->embeddingProvider,
+                'aegis.memory.embedding_model' => $this->embeddingModel,
+                'aegis.memory.embedding_dimensions' => $this->embeddingDimensions,
+            ]);
+
+            $result = $service->embed('test connection');
+
+            if ($result !== null) {
+                $dims = count($result);
+                $this->flash("Connection successful. Generated {$dims}-dimension embedding.", 'success');
+            } else {
+                $this->flash('Connection failed. Provider returned no embedding.', 'error');
+            }
+        } catch (Throwable $e) {
+            $this->flash('Connection failed: '.$e->getMessage(), 'error');
+        }
     }
 
     public function refreshMarketplace(): void
