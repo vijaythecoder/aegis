@@ -21,6 +21,8 @@ class TelegramPollCommand extends Command
 
     private int $offset = 0;
 
+    private array $processedUpdateIds = [];
+
     public function handle(): int
     {
         if (! $this->useNativephpDatabase()) {
@@ -43,6 +45,8 @@ class TelegramPollCommand extends Command
         $me = Http::get("{$baseUrl}/getMe")->json();
         $botName = data_get($me, 'result.username', 'unknown');
         $this->info("Connected as @{$botName}");
+
+        $this->flushPendingUpdates($baseUrl);
 
         while (true) {
             try {
@@ -88,7 +92,18 @@ class TelegramPollCommand extends Command
         }
 
         foreach ($updates as $update) {
-            $this->offset = ((int) data_get($update, 'update_id', 0)) + 1;
+            $updateId = (int) data_get($update, 'update_id', 0);
+            $this->offset = $updateId + 1;
+
+            if (isset($this->processedUpdateIds[$updateId])) {
+                continue;
+            }
+
+            $this->processedUpdateIds[$updateId] = true;
+
+            if (count($this->processedUpdateIds) > 500) {
+                $this->processedUpdateIds = array_slice($this->processedUpdateIds, -200, null, true);
+            }
 
             $message = (array) (data_get($update, 'message') ?? data_get($update, 'edited_message') ?? []);
             $chatId = (string) data_get($message, 'chat.id', '');
@@ -133,6 +148,25 @@ class TelegramPollCommand extends Command
                 ]);
                 $this->sendReply($baseUrl, $chatId, 'Sorry, something went wrong processing your message.');
             }
+        }
+    }
+
+    private function flushPendingUpdates(string $baseUrl): void
+    {
+        $response = Http::timeout(5)->get("{$baseUrl}/getUpdates", ['offset' => -1]);
+
+        if (! $response->successful()) {
+            return;
+        }
+
+        $updates = $response->json('result', []);
+
+        if (is_array($updates) && $updates !== []) {
+            $lastId = (int) data_get(end($updates), 'update_id', 0);
+            $this->offset = $lastId + 1;
+
+            Http::timeout(5)->get("{$baseUrl}/getUpdates", ['offset' => $this->offset]);
+            $this->info("Flushed stale updates. Offset set to {$this->offset}.");
         }
     }
 

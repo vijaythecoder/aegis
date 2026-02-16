@@ -113,7 +113,9 @@ class BrowserTool implements Tool
             is_string($url) && $url !== '' ? $url : null,
         );
 
-        if ($path !== '' && file_exists($path)) {
+        if ($path !== '') {
+            $exists = file_exists($path);
+            Log::debug('BrowserTool screenshot path', ['path' => $path, 'exists' => $exists]);
             self::$pendingScreenshots[] = $path;
         }
 

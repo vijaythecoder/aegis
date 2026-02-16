@@ -55,9 +55,13 @@ class MessageRouter
             ExtractMemoriesJob::dispatch($message->content, $responseText, $conversation->id);
         }
 
+        $screenshots = BrowserTool::flushScreenshots();
+
+        Log::debug('[MessageRouter] Attachments collected', ['screenshot_count' => count($screenshots), 'paths' => $screenshots]);
+
         $attachments = array_map(
             fn (string $path): array => ['path' => $path, 'type' => 'photo'],
-            BrowserTool::flushScreenshots(),
+            $screenshots,
         );
 
         return new RoutedResponse($responseText, $attachments);
