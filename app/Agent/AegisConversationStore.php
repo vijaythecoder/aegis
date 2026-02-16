@@ -2,6 +2,8 @@
 
 namespace App\Agent;
 
+use App\Jobs\ExtractMemoriesJob;
+use App\Jobs\SummarizeConversationJob;
 use App\Models\Conversation;
 use App\Models\Message;
 use Illuminate\Support\Collection;
@@ -64,6 +66,8 @@ class AegisConversationStore implements ConversationStore
      */
     public function getLatestConversationMessages(string $conversationId, int $limit): Collection
     {
+        $this->extractFromPrunedMessages((int) $conversationId, $limit);
+
         return Message::query()
             ->where('conversation_id', (int) $conversationId)
             ->orderByDesc('id')
@@ -72,5 +76,40 @@ class AegisConversationStore implements ConversationStore
             ->reverse()
             ->values()
             ->map(fn (Message $m) => new SdkMessage($m->role->value, $m->content));
+    }
+
+    private function extractFromPrunedMessages(int $conversationId, int $limit): void
+    {
+        $totalCount = Message::query()
+            ->where('conversation_id', $conversationId)
+            ->count();
+
+        if ($totalCount <= $limit) {
+            return;
+        }
+
+        $prunedMessages = Message::query()
+            ->where('conversation_id', $conversationId)
+            ->orderBy('id')
+            ->limit($totalCount - $limit)
+            ->get();
+
+        $pairs = [];
+        $currentUser = null;
+
+        foreach ($prunedMessages as $message) {
+            if ($message->role->value === 'user') {
+                $currentUser = $message->content;
+            } elseif ($message->role->value === 'assistant' && $currentUser !== null) {
+                $pairs[] = [$currentUser, $message->content];
+                $currentUser = null;
+            }
+        }
+
+        foreach ($pairs as [$userMsg, $assistantMsg]) {
+            ExtractMemoriesJob::dispatch($userMsg, $assistantMsg, $conversationId);
+        }
+
+        SummarizeConversationJob::dispatch($conversationId);
     }
 }
