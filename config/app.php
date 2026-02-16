@@ -65,7 +65,7 @@ return [
     |
     */
 
-    'timezone' => 'UTC',
+    'timezone' => env('APP_TIMEZONE', class_exists(IntlTimeZone::class) ? IntlTimeZone::createDefault()->getID() : 'UTC'),
 
     /*
     |--------------------------------------------------------------------------

@@ -25,11 +25,11 @@ class TelegramAdapter extends BaseAdapter
         }
 
         foreach ($this->splitMessage($content, $this->getCapabilities()->maxMessageLength) as $chunk) {
-            $this->safeExecute(fn () => $this->getBot()->sendMessage(
+            $this->getBot()->sendMessage(
                 text: $chunk,
                 chat_id: $channelId,
                 parse_mode: $parseMode,
-            ));
+            );
         }
     }
 

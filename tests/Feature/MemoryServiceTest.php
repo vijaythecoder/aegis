@@ -141,6 +141,18 @@ it('finds memories by key type filters and fts search', function () {
         ->and($search->first()->key)->toBe('editor');
 });
 
+it('sanitizes special characters in fts search queries', function () {
+    $service = app(MemoryService::class);
+
+    $service->store(MemoryType::Fact, 'project.url', 'I built scribia.ai for writing');
+
+    expect($service->search('scribia.ai check it once'))->toBeInstanceOf(\Illuminate\Support\Collection::class)
+        ->and($service->search('hello-world "quoted" (parens)'))->toBeInstanceOf(\Illuminate\Support\Collection::class)
+        ->and($service->search('test@email.com OR NOT AND'))->toBeInstanceOf(\Illuminate\Support\Collection::class)
+        ->and($service->search('...'))->toBeEmpty()
+        ->and($service->search(''))->toBeEmpty();
+});
+
 it('extracts and stores facts from assistant responses', function () {
     $memoryService = app(MemoryService::class);
     $extractor = app(FactExtractor::class);

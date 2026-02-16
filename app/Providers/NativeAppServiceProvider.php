@@ -2,10 +2,11 @@
 
 namespace App\Providers;
 
+use Native\Laravel\Contracts\ProvidesPhpIni;
+use Native\Laravel\Facades\ChildProcess;
 use Native\Laravel\Facades\Menu;
 use Native\Laravel\Facades\MenuBar;
 use Native\Laravel\Facades\Window;
-use Native\Laravel\Contracts\ProvidesPhpIni;
 
 class NativeAppServiceProvider implements ProvidesPhpIni
 {
@@ -46,6 +47,12 @@ class NativeAppServiceProvider implements ProvidesPhpIni
                     Menu::quit('Quit'),
                 )
             );
+
+        ChildProcess::artisan(
+            ['schedule:work'],
+            'scheduler',
+            persistent: true,
+        );
     }
 
     public function phpIni(): array

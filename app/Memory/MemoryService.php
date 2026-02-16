@@ -6,6 +6,7 @@ use App\Enums\MemoryType;
 use App\Models\Memory;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Throwable;
 
 class MemoryService
 {
@@ -52,16 +53,20 @@ class MemoryService
 
     public function search(string $query): Collection
     {
-        $query = trim($query);
+        $sanitized = $this->sanitizeFtsQuery($query);
 
-        if ($query === '') {
+        if ($sanitized === '') {
             return collect();
         }
 
-        $rows = collect(DB::select(
-            'SELECT memories.id FROM memories JOIN memories_fts ON memories_fts.rowid = memories.id WHERE memories_fts MATCH ? ORDER BY bm25(memories_fts)',
-            [$query],
-        ));
+        try {
+            $rows = collect(DB::select(
+                'SELECT memories.id FROM memories JOIN memories_fts ON memories_fts.rowid = memories.id WHERE memories_fts MATCH ? ORDER BY bm25(memories_fts)',
+                [$sanitized],
+            ));
+        } catch (Throwable) {
+            return collect();
+        }
 
         if ($rows->isEmpty()) {
             return collect();
@@ -74,6 +79,22 @@ class MemoryService
             ->map(fn (int $id): ?Memory => $memoriesById->get($id))
             ->filter()
             ->values();
+    }
+
+    protected function sanitizeFtsQuery(string $query): string
+    {
+        $words = preg_split('/[^\p{L}\p{N}]+/u', trim($query), -1, PREG_SPLIT_NO_EMPTY);
+
+        if ($words === false || $words === []) {
+            return '';
+        }
+
+        $quoted = array_map(
+            fn (string $word): string => '"'.str_replace('"', '', $word).'"',
+            $words,
+        );
+
+        return implode(' ', $quoted);
     }
 
     public function findByKey(string $key): ?Memory
