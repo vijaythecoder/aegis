@@ -5,6 +5,7 @@ use App\Models\AuditLog;
 use App\Models\Conversation;
 use App\Models\Memory;
 use App\Models\Message;
+use App\Models\ProactiveTask;
 use App\Models\Setting;
 use App\Models\ToolPermission;
 use App\Security\ApiKeyManager;
@@ -294,4 +295,84 @@ it('loads saved embedding settings on mount', function () {
         ->assertSet('embeddingProvider', 'openai')
         ->assertSet('embeddingModel', 'text-embedding-3-small')
         ->assertSet('embeddingDimensions', 1536);
+});
+
+// ── Automation Tab ───────────────────────────────────────────
+
+it('switches to automation tab', function () {
+    Livewire::test(Settings::class)
+        ->call('setTab', 'automation')
+        ->assertSet('activeTab', 'automation')
+        ->assertSee('Proactive Tasks');
+});
+
+it('lists proactive tasks on automation tab', function () {
+    ProactiveTask::factory()->create(['name' => 'Test Briefing']);
+
+    Livewire::test(Settings::class)
+        ->call('setTab', 'automation')
+        ->assertSee('Test Briefing');
+});
+
+it('toggles a proactive task active state', function () {
+    $task = ProactiveTask::factory()->create(['is_active' => false]);
+
+    Livewire::test(Settings::class)
+        ->call('setTab', 'automation')
+        ->call('toggleTask', $task->id);
+
+    expect($task->fresh()->is_active)->toBeTrue();
+});
+
+it('creates a new proactive task', function () {
+    Livewire::test(Settings::class)
+        ->call('setTab', 'automation')
+        ->call('newTask')
+        ->set('taskName', 'Weekly Report')
+        ->set('taskSchedule', '0 9 * * 1')
+        ->set('taskPrompt', 'Generate a weekly report.')
+        ->set('taskDeliveryChannel', 'chat')
+        ->call('saveTask')
+        ->assertSet('flashMessage', 'Task "Weekly Report" created.');
+
+    expect(ProactiveTask::query()->where('name', 'Weekly Report')->exists())->toBeTrue();
+});
+
+it('edits an existing proactive task', function () {
+    $task = ProactiveTask::factory()->create([
+        'name' => 'Old Name',
+        'schedule' => '0 8 * * *',
+    ]);
+
+    Livewire::test(Settings::class)
+        ->call('setTab', 'automation')
+        ->call('editTask', $task->id)
+        ->assertSet('taskName', 'Old Name')
+        ->set('taskName', 'New Name')
+        ->call('saveTask')
+        ->assertSet('flashMessage', 'Task "New Name" updated.');
+
+    expect($task->fresh()->name)->toBe('New Name');
+});
+
+it('deletes a proactive task', function () {
+    $task = ProactiveTask::factory()->create(['name' => 'Delete Me']);
+
+    Livewire::test(Settings::class)
+        ->call('setTab', 'automation')
+        ->call('deleteTask', $task->id)
+        ->assertSet('flashMessage', 'Task "Delete Me" deleted.');
+
+    expect(ProactiveTask::find($task->id))->toBeNull();
+});
+
+it('validates required fields when creating task', function () {
+    Livewire::test(Settings::class)
+        ->call('setTab', 'automation')
+        ->call('newTask')
+        ->set('taskName', '')
+        ->set('taskSchedule', '')
+        ->set('taskPrompt', '')
+        ->call('saveTask')
+        ->assertHasErrors(['taskName', 'taskSchedule', 'taskPrompt']);
 });

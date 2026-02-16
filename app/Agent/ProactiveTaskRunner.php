@@ -2,8 +2,10 @@
 
 namespace App\Agent;
 
+use App\Messaging\Adapters\TelegramAdapter;
 use App\Models\Conversation;
 use App\Models\Message;
+use App\Models\MessagingChannel;
 use App\Models\ProactiveTask;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -49,7 +51,7 @@ class ProactiveTaskRunner
     private function deliver(ProactiveTask $task, string $content): void
     {
         match ($task->delivery_channel) {
-            'chat' => $this->deliverToChat($task, $content),
+            'telegram' => $this->deliverToTelegram($task, $content),
             default => $this->deliverToChat($task, $content),
         };
     }
@@ -66,5 +68,33 @@ class ProactiveTaskRunner
             'role' => 'assistant',
             'content' => $content,
         ]);
+    }
+
+    private function deliverToTelegram(ProactiveTask $task, string $content): void
+    {
+        $channel = MessagingChannel::query()
+            ->where('platform', 'telegram')
+            ->where('active', true)
+            ->latest('updated_at')
+            ->first();
+
+        if (! $channel instanceof MessagingChannel) {
+            Log::warning('aegis.proactive.no_telegram_channel', [
+                'task' => $task->name,
+            ]);
+            $this->deliverToChat($task, $content);
+
+            return;
+        }
+
+        try {
+            app(TelegramAdapter::class)->sendMessage($channel->platform_channel_id, $content);
+        } catch (Throwable $e) {
+            Log::warning('aegis.proactive.telegram_failed', [
+                'task' => $task->name,
+                'error' => $e->getMessage(),
+            ]);
+            $this->deliverToChat($task, $content);
+        }
     }
 }

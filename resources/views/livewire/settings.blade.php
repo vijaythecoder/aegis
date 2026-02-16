@@ -37,7 +37,7 @@
     {{-- Tab Navigation --}}
     <div x-data="{ tab: $wire.entangle('activeTab') }" class="space-y-6">
         <nav class="flex gap-1 p-1 rounded-xl bg-aegis-850 border border-aegis-border">
-            @foreach (['providers' => 'Providers', 'memory' => 'Memory', 'marketplace' => 'Marketplace', 'security' => 'Security', 'general' => 'General'] as $key => $label)
+            @foreach (['providers' => 'Providers', 'memory' => 'Memory', 'automation' => 'Automation', 'marketplace' => 'Marketplace', 'security' => 'Security', 'general' => 'General'] as $key => $label)
                 <button
                     type="button"
                     wire:click="setTab('{{ $key }}')"
@@ -363,6 +363,168 @@
                         </div>
                     @endif
                 </div>
+            </div>
+        @endif
+
+        {{-- ═══ Automation Tab ═══ --}}
+        @if ($activeTab === 'automation')
+            <div class="space-y-8">
+
+                <div class="flex items-center justify-between gap-4">
+                    <div>
+                        <h3 class="text-lg font-display font-bold text-aegis-text">Proactive Tasks</h3>
+                        <p class="text-sm text-aegis-text-dim mt-1">Schedule tasks that Aegis runs automatically on a cron schedule.</p>
+                    </div>
+                    <button
+                        type="button"
+                        wire:click="newTask"
+                        class="px-4 py-2 rounded-lg text-xs font-semibold text-aegis-accent border border-aegis-accent/30 bg-aegis-accent/10 hover:bg-aegis-accent/20 transition-colors"
+                    >
+                        New Task
+                    </button>
+                </div>
+
+                {{-- Task Form --}}
+                @if ($editingTaskId !== null || ($taskName !== '' || $taskSchedule !== '' || $taskPrompt !== ''))
+                    <div class="rounded-xl border border-aegis-accent/20 bg-aegis-850 p-5 space-y-4">
+                        <h4 class="text-sm font-semibold text-aegis-text">
+                            {{ $editingTaskId ? 'Edit Task' : 'New Task' }}
+                        </h4>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-medium text-aegis-text-dim mb-1.5">Name</label>
+                                <input
+                                    type="text"
+                                    wire:model="taskName"
+                                    placeholder="Morning Briefing"
+                                    class="w-full px-3 py-2 rounded-lg bg-aegis-900 border border-aegis-border text-sm text-aegis-text placeholder:text-aegis-text-dim/40 focus:outline-none focus:border-aegis-accent/40 focus:ring-1 focus:ring-aegis-accent/20 transition-colors"
+                                />
+                                @error('taskName') <p class="text-xs text-red-400 mt-1">{{ $message }}</p> @enderror
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-aegis-text-dim mb-1.5">Schedule (Cron)</label>
+                                <input
+                                    type="text"
+                                    wire:model="taskSchedule"
+                                    placeholder="0 8 * * 1-5"
+                                    class="w-full px-3 py-2 rounded-lg bg-aegis-900 border border-aegis-border text-sm text-aegis-text placeholder:text-aegis-text-dim/40 focus:outline-none focus:border-aegis-accent/40 focus:ring-1 focus:ring-aegis-accent/20 font-mono transition-colors"
+                                />
+                                @error('taskSchedule') <p class="text-xs text-red-400 mt-1">{{ $message }}</p> @enderror
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-medium text-aegis-text-dim mb-1.5">Delivery Channel</label>
+                            <select
+                                wire:model="taskDeliveryChannel"
+                                class="w-full px-3 py-2 rounded-lg bg-aegis-900 border border-aegis-border text-sm text-aegis-text focus:outline-none focus:border-aegis-accent/40 focus:ring-1 focus:ring-aegis-accent/20 transition-colors"
+                            >
+                                <option value="chat">Chat</option>
+                                <option value="telegram">Telegram</option>
+                                <option value="notification">Notification</option>
+                            </select>
+                            @error('taskDeliveryChannel') <p class="text-xs text-red-400 mt-1">{{ $message }}</p> @enderror
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-medium text-aegis-text-dim mb-1.5">Prompt</label>
+                            <textarea
+                                wire:model="taskPrompt"
+                                rows="3"
+                                placeholder="Give me a morning briefing..."
+                                class="w-full px-3 py-2 rounded-lg bg-aegis-900 border border-aegis-border text-sm text-aegis-text placeholder:text-aegis-text-dim/40 focus:outline-none focus:border-aegis-accent/40 focus:ring-1 focus:ring-aegis-accent/20 resize-y transition-colors"
+                            ></textarea>
+                            @error('taskPrompt') <p class="text-xs text-red-400 mt-1">{{ $message }}</p> @enderror
+                        </div>
+
+                        <div class="flex items-center justify-end gap-2">
+                            <button
+                                type="button"
+                                wire:click="cancelTaskEdit"
+                                class="px-3 py-2 rounded-lg text-xs font-medium text-aegis-text-dim border border-aegis-border bg-aegis-surface hover:bg-aegis-surface-hover transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                wire:click="saveTask"
+                                class="px-4 py-2 rounded-lg text-xs font-semibold text-aegis-accent border border-aegis-accent/30 bg-aegis-accent/10 hover:bg-aegis-accent/20 transition-colors"
+                            >
+                                {{ $editingTaskId ? 'Update' : 'Create' }}
+                            </button>
+                        </div>
+                    </div>
+                @endif
+
+                {{-- Task List --}}
+                @if ($proactiveTasks->isEmpty())
+                    <div class="rounded-xl border border-aegis-border bg-aegis-850 p-6 text-center">
+                        <p class="text-sm text-aegis-text-dim">No proactive tasks configured. Create one or run the seeder.</p>
+                    </div>
+                @else
+                    <div class="space-y-3">
+                        @foreach ($proactiveTasks as $task)
+                            <div class="rounded-xl border border-aegis-border bg-aegis-850 p-5">
+                                <div class="flex items-center justify-between gap-4">
+                                    <div class="flex items-center gap-3 min-w-0 flex-1">
+                                        <button
+                                            type="button"
+                                            wire:click="toggleTask({{ $task->id }})"
+                                            @class([
+                                                'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
+                                                'bg-aegis-accent' => $task->is_active,
+                                                'bg-aegis-600' => !$task->is_active,
+                                            ])
+                                        >
+                                            <span
+                                                @class([
+                                                    'pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transform ring-0 transition duration-200 ease-in-out',
+                                                    'translate-x-4' => $task->is_active,
+                                                    'translate-x-0' => !$task->is_active,
+                                                ])
+                                            ></span>
+                                        </button>
+                                        <div class="min-w-0 flex-1">
+                                            <div class="flex items-center gap-2">
+                                                <p class="text-sm font-medium text-aegis-text">{{ $task->name }}</p>
+                                                <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-aegis-800 text-aegis-text-dim border border-aegis-border">{{ $task->schedule }}</span>
+                                                <span @class([
+                                                    'text-[10px] px-1.5 py-0.5 rounded-full font-medium border',
+                                                    'bg-emerald-500/10 text-emerald-400 border-emerald-400/20' => $task->delivery_channel === 'chat',
+                                                    'bg-blue-500/10 text-blue-400 border-blue-400/20' => $task->delivery_channel === 'telegram',
+                                                    'bg-purple-500/10 text-purple-400 border-purple-400/20' => $task->delivery_channel === 'notification',
+                                                ])>{{ $task->delivery_channel }}</span>
+                                            </div>
+                                            <p class="text-xs text-aegis-text-dim mt-1 truncate">{{ $task->prompt }}</p>
+                                            @if ($task->last_run_at)
+                                                <p class="text-[10px] text-aegis-text-dim/50 mt-1">Last run: {{ $task->last_run_at->diffForHumans() }}</p>
+                                            @endif
+                                        </div>
+                                    </div>
+
+                                    <div class="flex items-center gap-2 shrink-0">
+                                        <button
+                                            type="button"
+                                            wire:click="editTask({{ $task->id }})"
+                                            class="px-3 py-1.5 rounded-lg text-xs font-medium text-aegis-text-dim border border-aegis-border bg-aegis-surface hover:bg-aegis-surface-hover transition-colors"
+                                        >
+                                            Edit
+                                        </button>
+                                        <button
+                                            type="button"
+                                            wire:click="deleteTask({{ $task->id }})"
+                                            wire:confirm="Delete task &quot;{{ $task->name }}&quot;?"
+                                            class="px-3 py-1.5 rounded-lg text-xs font-medium text-red-300 border border-red-400/20 bg-red-500/5 hover:bg-red-500/15 transition-colors"
+                                        >
+                                            Delete
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                @endif
             </div>
         @endif
 

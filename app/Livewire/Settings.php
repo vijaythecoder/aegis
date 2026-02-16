@@ -12,6 +12,7 @@ use App\Models\AuditLog;
 use App\Models\Conversation;
 use App\Models\Memory;
 use App\Models\Message;
+use App\Models\ProactiveTask;
 use App\Models\Setting;
 use App\Models\ToolPermission;
 use App\Plugins\PluginInstaller;
@@ -46,6 +47,16 @@ class Settings extends Component
     public string $embeddingModel = '';
 
     public int $embeddingDimensions = 768;
+
+    public ?int $editingTaskId = null;
+
+    public string $taskName = '';
+
+    public string $taskSchedule = '';
+
+    public string $taskPrompt = '';
+
+    public string $taskDeliveryChannel = 'chat';
 
     public function mount(): void
     {
@@ -266,6 +277,86 @@ class Settings extends Component
         $this->flash('All data cleared.', 'success');
     }
 
+    public function toggleTask(int $id): void
+    {
+        $task = ProactiveTask::query()->findOrFail($id);
+        $task->update(['is_active' => ! $task->is_active]);
+
+        $status = $task->is_active ? 'enabled' : 'disabled';
+        $this->flash("Task \"{$task->name}\" {$status}.", 'success');
+    }
+
+    public function editTask(int $id): void
+    {
+        $task = ProactiveTask::query()->findOrFail($id);
+
+        $this->editingTaskId = $task->id;
+        $this->taskName = $task->name;
+        $this->taskSchedule = $task->schedule;
+        $this->taskPrompt = $task->prompt;
+        $this->taskDeliveryChannel = $task->delivery_channel;
+    }
+
+    public function saveTask(): void
+    {
+        $this->validate([
+            'taskName' => 'required|string|max:255',
+            'taskSchedule' => 'required|string|max:100',
+            'taskPrompt' => 'required|string',
+            'taskDeliveryChannel' => 'required|in:chat,telegram,notification',
+        ]);
+
+        if ($this->editingTaskId !== null) {
+            $task = ProactiveTask::query()->findOrFail($this->editingTaskId);
+            $task->update([
+                'name' => $this->taskName,
+                'schedule' => $this->taskSchedule,
+                'prompt' => $this->taskPrompt,
+                'delivery_channel' => $this->taskDeliveryChannel,
+            ]);
+            $this->flash("Task \"{$this->taskName}\" updated.", 'success');
+        } else {
+            ProactiveTask::query()->create([
+                'name' => $this->taskName,
+                'schedule' => $this->taskSchedule,
+                'prompt' => $this->taskPrompt,
+                'delivery_channel' => $this->taskDeliveryChannel,
+                'is_active' => false,
+            ]);
+            $this->flash("Task \"{$this->taskName}\" created.", 'success');
+        }
+
+        $this->resetTaskForm();
+    }
+
+    public function deleteTask(int $id): void
+    {
+        $task = ProactiveTask::query()->findOrFail($id);
+        $name = $task->name;
+        $task->delete();
+        $this->flash("Task \"{$name}\" deleted.", 'success');
+    }
+
+    public function newTask(): void
+    {
+        $this->resetTaskForm();
+        $this->editingTaskId = null;
+    }
+
+    public function cancelTaskEdit(): void
+    {
+        $this->resetTaskForm();
+    }
+
+    private function resetTaskForm(): void
+    {
+        $this->editingTaskId = null;
+        $this->taskName = '';
+        $this->taskSchedule = '';
+        $this->taskPrompt = '';
+        $this->taskDeliveryChannel = 'chat';
+    }
+
     public function render()
     {
         $marketplacePlugins = collect();
@@ -295,6 +386,7 @@ class Settings extends Component
             'marketplaceUpdates' => $marketplaceUpdates,
             'memories' => $this->activeTab === 'memory' ? app(MemoryService::class)->all() : collect(),
             'userProfile' => $this->activeTab === 'memory' ? app(UserProfileService::class)->getProfile() : null,
+            'proactiveTasks' => $this->activeTab === 'automation' ? ProactiveTask::query()->orderBy('name')->get() : collect(),
         ]);
     }
 

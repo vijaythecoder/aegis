@@ -2,9 +2,12 @@
 
 use App\Agent\AegisAgent;
 use App\Agent\ProactiveTaskRunner;
+use App\Messaging\Adapters\TelegramAdapter;
 use App\Models\Conversation;
 use App\Models\Message;
+use App\Models\MessagingChannel;
 use App\Models\ProactiveTask;
+use Database\Seeders\ProactiveTaskSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
@@ -115,4 +118,81 @@ it('runs artisan command successfully', function () {
     $this->artisan('aegis:proactive:run')
         ->assertSuccessful()
         ->expectsOutputToContain('Ran 1 proactive task(s).');
+});
+
+it('seeds default proactive tasks via seeder', function () {
+    (new ProactiveTaskSeeder)->run();
+
+    $tasks = ProactiveTask::all();
+    expect($tasks)->toHaveCount(4);
+
+    $names = $tasks->pluck('name')->sort()->values()->all();
+    expect($names)->toBe([
+        'API Key Expiration',
+        'Memory Digest',
+        'Morning Briefing',
+        'Stale Conversation Nudge',
+    ]);
+
+    foreach ($tasks as $task) {
+        expect($task->is_active)->toBeFalse('All seeded tasks should be inactive by default');
+    }
+});
+
+it('seeder is idempotent', function () {
+    (new ProactiveTaskSeeder)->run();
+    (new ProactiveTaskSeeder)->run();
+
+    expect(ProactiveTask::count())->toBe(4);
+});
+
+it('delivers to telegram when channel exists', function () {
+    AegisAgent::fake(['Telegram briefing content']);
+
+    $adapter = Mockery::mock(TelegramAdapter::class);
+    $adapter->shouldReceive('sendMessage')
+        ->once()
+        ->with('12345', 'Telegram briefing content');
+
+    app()->instance(TelegramAdapter::class, $adapter);
+
+    $conversation = Conversation::create([
+        'title' => 'Telegram Session',
+        'last_message_at' => now(),
+    ]);
+
+    MessagingChannel::create([
+        'platform' => 'telegram',
+        'platform_channel_id' => '12345',
+        'platform_user_id' => '67890',
+        'conversation_id' => $conversation->id,
+        'active' => true,
+    ]);
+
+    $task = ProactiveTask::factory()->due()->create([
+        'delivery_channel' => 'telegram',
+    ]);
+
+    $runner = app(ProactiveTaskRunner::class);
+    $runner->runDueTasks();
+
+    expect(Conversation::count())->toBe(1, 'Only the channel setup conversation should exist, not a proactive task one');
+});
+
+it('falls back to chat when no telegram channel exists', function () {
+    AegisAgent::fake(['Fallback content']);
+
+    $task = ProactiveTask::factory()->due()->create([
+        'name' => 'Telegram Fallback',
+        'delivery_channel' => 'telegram',
+    ]);
+
+    $runner = app(ProactiveTaskRunner::class);
+    $runner->runDueTasks();
+
+    $conversation = Conversation::query()->where('title', 'Telegram Fallback')->first();
+    expect($conversation)->not->toBeNull();
+
+    $message = Message::query()->where('conversation_id', $conversation->id)->first();
+    expect($message->content)->toBe('Fallback content');
 });
