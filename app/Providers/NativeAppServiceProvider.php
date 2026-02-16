@@ -53,6 +53,16 @@ class NativeAppServiceProvider implements ProvidesPhpIni
             'scheduler',
             persistent: true,
         );
+
+        $telegramToken = (string) config('aegis.messaging.telegram.bot_token', '');
+
+        if ($telegramToken !== '') {
+            ChildProcess::artisan(
+                ['telegram:poll'],
+                'telegram-poller',
+                persistent: true,
+            );
+        }
     }
 
     public function phpIni(): array

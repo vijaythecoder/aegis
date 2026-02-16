@@ -19,11 +19,13 @@ trait UsesNativephpDatabase
 {
     protected function useNativephpDatabase(): bool
     {
-        $databasePath = config('nativephp-internal.database_path');
+        if (config('nativephp-internal.running')) {
+            $this->syncApiKeysFromDatabase();
 
-        if (! is_string($databasePath) || $databasePath === '') {
-            $databasePath = database_path('nativephp.sqlite');
+            return true;
         }
+
+        $databasePath = database_path('nativephp.sqlite');
 
         if (! file_exists($databasePath)) {
             return false;
