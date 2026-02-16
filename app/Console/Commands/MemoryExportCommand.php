@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\Memory;
 use App\Models\Procedure;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Schema;
 
 class MemoryExportCommand extends Command
 {
@@ -26,7 +27,9 @@ class MemoryExportCommand extends Command
         }
 
         $memories = Memory::query()->orderBy('type')->orderBy('key')->get();
-        $procedures = Procedure::query()->where('is_active', true)->orderBy('trigger')->get();
+        $procedures = Schema::hasTable('procedures')
+            ? Procedure::query()->where('is_active', true)->orderBy('trigger')->get()
+            : collect();
 
         $content = $format === 'json'
             ? $this->exportJson($memories, $procedures)

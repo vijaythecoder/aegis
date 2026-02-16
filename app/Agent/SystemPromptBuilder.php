@@ -8,6 +8,7 @@ use App\Models\Memory;
 use App\Models\Procedure;
 use App\Tools\ToolRegistry;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 
 class SystemPromptBuilder
 {
@@ -85,6 +86,10 @@ class SystemPromptBuilder
 
     private function renderProceduresSection(): string
     {
+        if (! Schema::hasTable('procedures')) {
+            return '';
+        }
+
         $procedures = Procedure::query()
             ->where('is_active', true)
             ->orderBy('trigger')
