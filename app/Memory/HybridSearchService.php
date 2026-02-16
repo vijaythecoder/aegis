@@ -3,6 +3,8 @@
 namespace App\Memory;
 
 use Illuminate\Support\Collection;
+use Laravel\Ai\Reranking;
+use Throwable;
 
 class HybridSearchService
 {
@@ -22,15 +24,23 @@ class HybridSearchService
         $vectorResults = $this->vectorSearch($queryEmbedding, $limit);
         $ftsResults = $this->ftsSearch($query, $limit);
 
+        if ($vectorResults->isEmpty() && $ftsResults->isEmpty()) {
+            return collect();
+        }
+
         if ($vectorResults->isEmpty()) {
-            return $ftsResults->take($limit);
+            $results = $ftsResults->take($limit);
+        } elseif ($ftsResults->isEmpty()) {
+            $results = $vectorResults->take($limit);
+        } else {
+            $results = $this->fuseResults($vectorResults, $ftsResults, $alpha)->take($limit);
         }
 
-        if ($ftsResults->isEmpty()) {
-            return $vectorResults->take($limit);
+        if (config('aegis.memory.reranking_enabled', false) && $results->count() > 1) {
+            return $this->rerank($results, $query, $limit);
         }
 
-        return $this->fuseResults($vectorResults, $ftsResults, $alpha)->take($limit);
+        return $results;
     }
 
     protected function vectorSearch(?array $queryEmbedding, int $limit): Collection
@@ -58,6 +68,30 @@ class HybridSearchService
             'content_preview' => $memory->value,
             'score' => 1.0 - ($index * 0.1),
         ]);
+    }
+
+    protected function rerank(Collection $results, string $query, int $limit): Collection
+    {
+        try {
+            $documents = $results->pluck('content_preview')->values()->all();
+
+            $reranked = Reranking::of($documents)
+                ->limit($limit)
+                ->rerank($query);
+
+            $indexed = $results->values();
+
+            return collect($reranked->results)->map(function ($rankedDoc) use ($indexed) {
+                $original = $indexed[$rankedDoc->index];
+
+                return [
+                    ...$original,
+                    'score' => $rankedDoc->score,
+                ];
+            })->values();
+        } catch (Throwable) {
+            return $results;
+        }
     }
 
     protected function fuseResults(Collection $vectorResults, Collection $ftsResults, float $alpha): Collection

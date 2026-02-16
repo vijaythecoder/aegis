@@ -7,6 +7,7 @@ use App\Memory\MemoryService;
 use App\Memory\VectorStore;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Ai\Embeddings;
+use Laravel\Ai\Reranking;
 
 uses(RefreshDatabase::class);
 
@@ -120,4 +121,92 @@ it('uses configurable alpha weight for score fusion', function () {
     $results = $this->service->search('test', $embedding);
 
     expect($results)->not->toBeEmpty();
+});
+
+it('reranks results when reranking is enabled', function () {
+    config(['aegis.memory.reranking_enabled' => true]);
+    Reranking::fake();
+
+    $embedding = Embeddings::fakeEmbedding(768);
+
+    for ($i = 1; $i <= 3; $i++) {
+        $this->vectorStore->store($embedding, [
+            'source_type' => 'message',
+            'source_id' => $i,
+            'content_preview' => "Result about topic {$i}",
+        ]);
+    }
+
+    Embeddings::fake();
+
+    $results = $this->service->search('topic', $embedding);
+
+    expect($results)->toHaveCount(3);
+    expect($results->first())->toHaveKey('score');
+
+    Reranking::assertReranked(fn ($prompt) => $prompt->query === 'topic'
+        && count($prompt->documents) === 3);
+});
+
+it('skips reranking when disabled', function () {
+    config(['aegis.memory.reranking_enabled' => false]);
+    Reranking::fake();
+
+    $embedding = Embeddings::fakeEmbedding(768);
+
+    $this->vectorStore->store($embedding, [
+        'source_type' => 'message',
+        'source_id' => 1,
+        'content_preview' => 'Some result',
+    ]);
+
+    Embeddings::fake();
+
+    $results = $this->service->search('test', $embedding);
+
+    expect($results)->not->toBeEmpty();
+
+    Reranking::assertNothingReranked();
+});
+
+it('falls back to original results when reranking fails', function () {
+    config(['aegis.memory.reranking_enabled' => true]);
+    Reranking::fake(fn () => throw new RuntimeException('Reranking API down'));
+
+    $embedding = Embeddings::fakeEmbedding(768);
+
+    for ($i = 1; $i <= 2; $i++) {
+        $this->vectorStore->store($embedding, [
+            'source_type' => 'message',
+            'source_id' => $i,
+            'content_preview' => "Fallback result {$i}",
+        ]);
+    }
+
+    Embeddings::fake();
+
+    $results = $this->service->search('test', $embedding);
+
+    expect($results)->toHaveCount(2);
+});
+
+it('skips reranking for single result', function () {
+    config(['aegis.memory.reranking_enabled' => true]);
+    Reranking::fake();
+
+    $embedding = Embeddings::fakeEmbedding(768);
+
+    $this->vectorStore->store($embedding, [
+        'source_type' => 'message',
+        'source_id' => 1,
+        'content_preview' => 'Single result',
+    ]);
+
+    Embeddings::fake();
+
+    $results = $this->service->search('test', $embedding);
+
+    expect($results)->toHaveCount(1);
+
+    Reranking::assertNothingReranked();
 });

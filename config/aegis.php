@@ -295,6 +295,7 @@ return [
         'embedding_dimensions' => (int) env('AEGIS_EMBEDDING_DIMENSIONS', 1536),
         'hybrid_search_alpha' => (float) env('AEGIS_HYBRID_SEARCH_ALPHA', 0.7),
         'auto_recall' => (bool) env('AEGIS_MEMORY_AUTO_RECALL', true),
+        'reranking_enabled' => (bool) env('AEGIS_RERANKING_ENABLED', false),
     ],
 
     'rag' => [
