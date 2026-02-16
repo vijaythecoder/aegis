@@ -76,6 +76,7 @@ trait UsesNativephpDatabase
                 $dbKey = $apiKeyManager->retrieve($aegisProvider);
                 if ($dbKey !== null && $dbKey !== '') {
                     config(["prism.providers.{$prismProvider}.api_key" => $dbKey]);
+                    config(["ai.providers.{$prismProvider}.key" => $dbKey]);
                 }
             }
 
