@@ -9,3 +9,4 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('aegis:vacuum')->weekly();
+Schedule::command('aegis:memory:decay')->weekly();
