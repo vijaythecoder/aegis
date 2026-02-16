@@ -133,7 +133,7 @@ class BrowserSession
             throw new \RuntimeException('Browser tool requires the "playwright" npm package. Install it with: npm install playwright');
         }
 
-        $this->startBridgeProcess();
+        $this->launched = true;
     }
 
     public function navigate(string $url): array
@@ -242,7 +242,8 @@ class BrowserSession
     {
         $this->tabs = [];
         $this->nextTabId = 1;
-        $this->stopBridgeProcess();
+        $this->launched = false;
+        $this->process = null;
     }
 
     public function isLaunched(): bool
@@ -255,33 +256,12 @@ class BrowserSession
         $this->cleanup();
     }
 
-    protected function startBridgeProcess(): void
+    protected function setLaunchedState(bool $launched): void
     {
-        $this->process = new Process([self::nodeBinary(), '-e', 'process.stdin.resume();'], base_path());
-        $this->process->setTimeout(null);
-        $this->process->start();
-
-        usleep(100000);
-
-        if (! $this->process->isRunning()) {
-            $error = trim($this->process->getErrorOutput());
-            if ($error === '') {
-                $error = 'Failed to launch Node.js browser bridge process.';
-            }
-            throw new \RuntimeException($error);
+        $this->launched = $launched;
+        if (! $launched) {
+            $this->process = null;
         }
-
-        $this->launched = true;
-    }
-
-    protected function stopBridgeProcess(): void
-    {
-        if ($this->process instanceof Process && $this->process->isRunning()) {
-            $this->process->stop(2);
-        }
-
-        $this->process = null;
-        $this->launched = false;
     }
 
     protected function runBridgeCommand(array $payload): array
@@ -305,14 +285,6 @@ class BrowserSession
         }
 
         return (array) ($response['output'] ?? []);
-    }
-
-    protected function setLaunchedState(bool $launched): void
-    {
-        $this->launched = $launched;
-        if (! $launched) {
-            $this->process = null;
-        }
     }
 
     private function resolveScreenshotPath(): string
@@ -383,7 +355,7 @@ const fs = require('fs');
 JS;
 
         $process = new Process([self::nodeBinary(), '-e', $script, $encodedPayload], base_path());
-        $process->setTimeout($this->timeout);
+        $process->setTimeout(max($this->timeout, 60));
         $process->run();
 
         $stdout = trim($process->getOutput());

@@ -94,32 +94,19 @@ it('respects browser tab limit by closing oldest tab', function () {
 it('cleans up browser session state', function () {
     $session = new class(5) extends BrowserSession
     {
-        public bool $bridgeStopped = false;
-
-        protected function startBridgeProcess(): void
-        {
-            $this->setLaunchedState(true);
-        }
-
-        protected function stopBridgeProcess(): void
-        {
-            $this->bridgeStopped = true;
-            $this->setLaunchedState(false);
-        }
-
         protected function runBridgeCommand(array $payload): array
         {
             return [];
         }
     };
 
+    BrowserSession::fakePlaywrightAvailable(true);
     $session->openTab();
     $session->openTab();
     $session->cleanup();
 
     expect($session->tabCount())->toBe(0)
-        ->and($session->isLaunched())->toBeFalse()
-        ->and($session->bridgeStopped)->toBeTrue();
+        ->and($session->isLaunched())->toBeFalse();
 });
 
 it('gets text content from selector', function () {
