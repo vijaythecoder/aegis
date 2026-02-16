@@ -3,6 +3,7 @@
 namespace App\Security;
 
 use App\Enums\ToolPermissionLevel;
+use App\Models\CapabilityToken;
 use App\Models\ToolPermission;
 
 class PermissionManager
@@ -20,6 +21,11 @@ class PermissionManager
         }
 
         $scope = $this->scopeFromContext($context);
+
+        if ($this->hasCapability($permission, $scope)) {
+            return PermissionDecision::Allowed;
+        }
+
         $persisted = $this->resolvePermission($toolName, $scope);
 
         if ($persisted === ToolPermissionLevel::Allow) {
@@ -89,6 +95,49 @@ class PermissionManager
         }
 
         return null;
+    }
+
+    public function grantCapability(string $capability, ?string $scope = null, ?string $issuer = null, ?\DateTimeInterface $expiresAt = null): CapabilityToken
+    {
+        return CapabilityToken::query()->create([
+            'capability' => $capability,
+            'scope' => $scope,
+            'issuer' => $issuer ?? 'system',
+            'expires_at' => $expiresAt,
+        ]);
+    }
+
+    public function revokeCapability(int $tokenId): bool
+    {
+        $token = CapabilityToken::query()->find($tokenId);
+
+        return $token !== null && $token->revoke();
+    }
+
+    public function activeCapabilities(): \Illuminate\Database\Eloquent\Collection
+    {
+        return CapabilityToken::query()
+            ->where('revoked', false)
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->get();
+    }
+
+    private function hasCapability(string $permission, string $scope): bool
+    {
+        $capabilityMap = [
+            'read' => 'read_file',
+            'write' => 'write_file',
+            'execute' => 'execute',
+        ];
+
+        $capability = $capabilityMap[$permission] ?? $permission;
+
+        return CapabilityToken::query()
+            ->where('capability', $capability)
+            ->where('revoked', false)
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->get()
+            ->contains(fn (CapabilityToken $token) => $token->matches($capability, $scope !== 'global' ? $scope : null));
     }
 
     private function containsBlockedPath(array $context): bool

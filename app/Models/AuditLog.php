@@ -19,6 +19,8 @@ class AuditLog extends Model
         'result',
         'ip_address',
         'details',
+        'signature',
+        'previous_signature',
     ];
 
     protected function casts(): array
