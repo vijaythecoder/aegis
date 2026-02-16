@@ -3,6 +3,7 @@
 namespace App\Tools;
 
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 use Stringable;
@@ -25,7 +26,7 @@ class BrowserTool implements Tool
 
     public function description(): Stringable|string
     {
-        return 'Browse the web: navigate, screenshot, click, fill forms, extract text';
+        return 'Browse the web: navigate to URLs, take screenshots of websites (pass url with screenshot action), click elements, fill forms, extract text. For screenshots, always provide the url parameter.';
     }
 
     public function schema(JsonSchema $schema): array
@@ -41,14 +42,21 @@ class BrowserTool implements Tool
 
     public function handle(Request $request): Stringable|string
     {
+        Log::debug('BrowserTool invoked', ['action' => $request['action'] ?? null, 'url' => $request['url'] ?? null]);
+
         if (! BrowserSession::isPlaywrightAvailable()) {
+            Log::warning('BrowserTool: playwright not available', [
+                'node_binary' => BrowserSession::nodeBinary(),
+                'base_path' => base_path(),
+            ]);
+
             return 'Error: Browser tool is unavailable. The "playwright" npm package is not installed. Install it with: npm install playwright';
         }
 
         $action = (string) $request->string('action');
 
         try {
-            return match ($action) {
+            $result = match ($action) {
                 'navigate' => $this->navigate($request),
                 'screenshot' => $this->screenshot($request),
                 'click' => $this->click($request),
@@ -58,7 +66,13 @@ class BrowserTool implements Tool
                 'get_page_content' => $this->getPageContent(),
                 default => "Error: Unknown browser action: {$action}",
             };
+
+            Log::debug('BrowserTool success', ['action' => $action, 'result_length' => strlen($result)]);
+
+            return $result;
         } catch (\Throwable $e) {
+            Log::error('BrowserTool error', ['action' => $action, 'error' => $e->getMessage()]);
+
             return 'Error: '.$e->getMessage();
         }
     }
@@ -82,7 +96,11 @@ class BrowserTool implements Tool
     private function screenshot(Request $request): string
     {
         $selector = $request['selector'] ?? null;
-        $path = $this->session->screenshot($selector);
+        $url = $request['url'] ?? null;
+        $path = $this->session->screenshot(
+            is_string($selector) && $selector !== '' ? $selector : null,
+            is_string($url) && $url !== '' ? $url : null,
+        );
 
         return "Screenshot saved to: {$path}";
     }

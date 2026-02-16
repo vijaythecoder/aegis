@@ -37,7 +37,7 @@ it('captures screenshot and returns file path', function () {
     $session = Mockery::mock(BrowserSession::class);
     $session->shouldReceive('screenshot')
         ->once()
-        ->with(null)
+        ->with(null, null)
         ->andReturn(storage_path('app/screenshots/example.png'));
 
     app()->instance(BrowserSession::class, $session);

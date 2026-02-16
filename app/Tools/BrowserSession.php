@@ -57,7 +57,10 @@ class BrowserSession
             return self::$playwrightAvailable;
         }
 
-        $check = new Process(['node', '-e', "try { require.resolve('playwright'); process.stdout.write('1'); } catch(e) { process.stdout.write('0'); }"]);
+        $check = new Process(
+            [self::nodeBinary(), '-e', "try { require.resolve('playwright'); process.stdout.write('1'); } catch(e) { process.stdout.write('0'); }"],
+            base_path(),
+        );
         $check->setTimeout(10);
 
         try {
@@ -73,6 +76,46 @@ class BrowserSession
     public static function resetPlaywrightCache(): void
     {
         self::$playwrightAvailable = null;
+    }
+
+    /**
+     * Resolve the full path to the Node.js binary.
+     *
+     * NativePHP runs inside Electron which may have a stripped PATH, so the
+     * bare "node" command may not resolve. We first try the Electron-bundled
+     * binary, then fall back to common install locations before defaulting to
+     * the bare command name.
+     */
+    public static function nodeBinary(): string
+    {
+        // Allow explicit override via config/env.
+        $configured = (string) config('aegis.browser.node_path', '');
+        if ($configured !== '' && is_executable($configured)) {
+            return $configured;
+        }
+
+        // Electron bundles its own node; check common locations.
+        $candidates = array_filter([
+            getenv('NODE_PATH_BIN') ?: null,
+            '/usr/local/bin/node',
+            '/opt/homebrew/bin/node',
+        ]);
+
+        // Also check nix-profile and nvm paths common on macOS.
+        $home = getenv('HOME') ?: ($_SERVER['HOME'] ?? '');
+        if ($home !== '') {
+            $candidates[] = $home.'/.nix-profile/bin/node';
+            $candidates[] = $home.'/.nvm/current/bin/node';
+        }
+
+        foreach ($candidates as $path) {
+            if (is_string($path) && $path !== '' && is_executable($path)) {
+                return $path;
+            }
+        }
+
+        // Last resort — hope it's on PATH.
+        return 'node';
     }
 
     public static function fakePlaywrightAvailable(bool $available = true): void
@@ -101,12 +144,18 @@ class BrowserSession
         ]);
     }
 
-    public function screenshot(?string $selector = null): string
+    public function screenshot(?string $selector = null, ?string $url = null): string
     {
-        $result = $this->runBridgeCommand([
+        $command = [
             'action' => 'screenshot',
             'selector' => $selector,
-        ]);
+        ];
+
+        if ($url !== null && $url !== '') {
+            $command['url'] = $url;
+        }
+
+        $result = $this->runBridgeCommand($command);
 
         return (string) ($result['path'] ?? '');
     }
@@ -208,7 +257,7 @@ class BrowserSession
 
     protected function startBridgeProcess(): void
     {
-        $this->process = new Process(['node', '-e', 'process.stdin.resume();']);
+        $this->process = new Process([self::nodeBinary(), '-e', 'process.stdin.resume();'], base_path());
         $this->process->setTimeout(null);
         $this->process->start();
 
@@ -292,18 +341,21 @@ const fs = require('fs');
   const context = await browser.newContext();
   const page = await context.newPage();
 
-  let output = {};
+   let output = {};
   if (payload.action === 'navigate') {
     await page.goto(payload.url, { waitUntil: 'domcontentloaded', timeout: (payload.timeout || 30) * 1000 });
     output = { title: await page.title(), url: page.url() };
   } else if (payload.action === 'screenshot') {
+    if (payload.url) {
+      await page.goto(payload.url, { waitUntil: 'domcontentloaded', timeout: (payload.timeout || 30) * 1000 });
+    }
     const file = `${payload.screenshot_path}/shot-${Date.now()}.png`;
     if (payload.selector) {
       await page.locator(payload.selector).screenshot({ path: file });
     } else {
       await page.screenshot({ path: file, fullPage: true });
     }
-    output = { path: file };
+    output = { path: file, url: page.url(), title: await page.title() };
   } else if (payload.action === 'click') {
     await page.click(payload.selector);
     output = { clicked: true };
@@ -330,7 +382,7 @@ const fs = require('fs');
 });
 JS;
 
-        $process = new Process(['node', '-e', $script, $encodedPayload]);
+        $process = new Process([self::nodeBinary(), '-e', $script, $encodedPayload], base_path());
         $process->setTimeout($this->timeout);
         $process->run();
 
