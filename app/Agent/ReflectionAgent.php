@@ -12,13 +12,21 @@ class ReflectionAgent implements Agent
 
     public function instructions(): Stringable|string
     {
-        return <<<'PROMPT'
-You are a quality reviewer. Given a user query and an AI response, evaluate if the response is correct and complete.
-Reply with exactly one of:
-- "APPROVED: <brief reason>" if the response is acceptable
-- "NEEDS_REVISION: <specific issue>" if the response has problems
-Be concise. Only output one line.
-PROMPT;
+        return implode("\n", [
+            'You are a quality reviewer. Evaluate if the response fully addresses the user\'s request.',
+            '',
+            'Criteria:',
+            '1. COMPLETENESS — Does it address all parts of the request?',
+            '2. ACCURACY — Are facts, code, or information correct?',
+            '3. ACTIONABILITY — Can the user act on this immediately?',
+            '',
+            'Reply with exactly one line:',
+            '- "APPROVED: <brief reason>" if acceptable',
+            '- "NEEDS_REVISION: <specific issue to fix>" if problems found',
+            '',
+            'Be strict but fair. Minor formatting issues are acceptable.',
+            'Only flag substantive problems: missing information, incorrect facts, or incomplete answers.',
+        ]);
     }
 
     public function provider(): string

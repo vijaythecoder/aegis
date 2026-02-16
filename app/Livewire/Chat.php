@@ -3,6 +3,7 @@
 namespace App\Livewire;
 
 use App\Agent\AegisAgent;
+use App\Agent\AgentLoop;
 use App\Jobs\ExtractMemoriesJob;
 use App\Memory\ConversationService;
 use App\Memory\MessageService;
@@ -58,28 +59,54 @@ class Chat extends Component
         $this->pendingMessage = '';
 
         try {
-            $agent = app(AegisAgent::class);
-            $agent->forConversation($this->conversationId);
-            $stream = $agent->stream($text);
+            $loop = app(AgentLoop::class);
 
-            $assistantResponse = '';
+            $loop->onStep(function (string $phase, string $detail): void {
+                $this->dispatch('agent-status-changed', state: $phase, detail: $detail);
+            });
 
-            foreach ($stream as $event) {
-                if ($event instanceof TextDelta) {
-                    $assistantResponse .= $event->delta;
-                    $this->stream(to: 'streamedResponse', content: $event->delta);
-                }
+            if ($loop->requiresPlanning($text)) {
+                $this->generatePlannedResponse($loop, $text);
+            } else {
+                $this->generateStreamedResponse($text);
             }
 
             $this->generateTitleIfNeeded($text);
-
-            if (trim($assistantResponse) !== '') {
-                ExtractMemoriesJob::dispatch($text, $assistantResponse, $this->conversationId);
-            }
         } finally {
             $this->isThinking = false;
             $this->dispatch('agent-status-changed', state: 'idle');
             $this->dispatch('message-sent');
+        }
+    }
+
+    private function generateStreamedResponse(string $text): void
+    {
+        $agent = app(AegisAgent::class);
+        $agent->forConversation($this->conversationId);
+        $stream = $agent->stream($text);
+
+        $assistantResponse = '';
+
+        foreach ($stream as $event) {
+            if ($event instanceof TextDelta) {
+                $assistantResponse .= $event->delta;
+                $this->stream(to: 'streamedResponse', content: $event->delta);
+            }
+        }
+
+        if (trim($assistantResponse) !== '') {
+            ExtractMemoriesJob::dispatch($text, $assistantResponse, $this->conversationId);
+        }
+    }
+
+    private function generatePlannedResponse(AgentLoop $loop, string $text): void
+    {
+        $result = $loop->execute($text, $this->conversationId);
+
+        $this->stream(to: 'streamedResponse', content: $result->response);
+
+        if (trim($result->response) !== '') {
+            ExtractMemoriesJob::dispatch($text, $result->response, $this->conversationId);
         }
     }
 
