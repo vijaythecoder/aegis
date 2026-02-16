@@ -152,7 +152,7 @@ it('delivers to telegram when channel exists', function () {
     $adapter = Mockery::mock(TelegramAdapter::class);
     $adapter->shouldReceive('sendMessage')
         ->once()
-        ->with('12345', 'Telegram briefing content');
+        ->with('12345', 'Telegram briefing content', null);
 
     app()->instance(TelegramAdapter::class, $adapter);
 

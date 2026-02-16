@@ -88,7 +88,7 @@ class ProactiveTaskRunner
         }
 
         try {
-            app(TelegramAdapter::class)->sendMessage($channel->platform_channel_id, $content);
+            app(TelegramAdapter::class)->sendMessage($channel->platform_channel_id, $content, null);
         } catch (Throwable $e) {
             Log::warning('aegis.proactive.telegram_failed', [
                 'task' => $task->name,

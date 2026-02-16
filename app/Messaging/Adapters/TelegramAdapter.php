@@ -18,7 +18,7 @@ class TelegramAdapter extends BaseAdapter
         private mixed $bot = null,
     ) {}
 
-    public function sendMessage(string $channelId, string $content): void
+    public function sendMessage(string $channelId, string $content, ?string $parseMode = 'MarkdownV2'): void
     {
         if (! $this->checkRateLimit()) {
             return;
@@ -28,7 +28,7 @@ class TelegramAdapter extends BaseAdapter
             $this->safeExecute(fn () => $this->getBot()->sendMessage(
                 text: $chunk,
                 chat_id: $channelId,
-                parse_mode: 'MarkdownV2',
+                parse_mode: $parseMode,
             ));
         }
     }
@@ -100,7 +100,7 @@ class TelegramAdapter extends BaseAdapter
             '/new' => $this->newConversationResponse($message),
             '/history' => $this->historyResponse($message),
             '/settings' => $this->settingsResponse(),
-            default => "Unknown command. Try /start, /new, /history, or /settings.",
+            default => 'Unknown command. Try /start, /new, /history, or /settings.',
         };
     }
 
