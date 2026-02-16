@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Agent\MemoryExtractorAgent;
 use App\Enums\MemoryType;
 use App\Memory\EmbeddingService;
 use App\Memory\MemoryService;
@@ -10,7 +11,6 @@ use App\Memory\VectorStore;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
-use Prism\Prism\Facades\Prism;
 use Throwable;
 
 class ExtractMemoriesJob implements ShouldQueue
@@ -84,41 +84,18 @@ class ExtractMemoriesJob implements ShouldQueue
      */
     private function extractViaLlm(): array
     {
-        $provider = (string) config('aegis.agent.summary_provider', 'anthropic');
-        $model = (string) config('aegis.agent.summary_model', 'claude-3-5-haiku-latest');
-
         $combinedText = mb_substr("User: {$this->userMessage}\nAssistant: {$this->assistantResponse}", 0, 3000);
 
         try {
-            $response = Prism::text()
-                ->using($provider, $model)
-                ->withClientOptions(['timeout' => 15])
-                ->withSystemPrompt(implode("\n", [
-                    'Extract memorable facts, preferences, and notes from this conversation exchange.',
-                    'Return a JSON array of objects with keys: "type", "key", "value".',
-                    'Types: "fact" (personal info like name, job, location, timezone), "preference" (likes, dislikes, tool preferences), "note" (project details, important context).',
-                    'Keys should be dot-notation identifiers like: user.name, user.timezone, user.preference.theme, project.aegis.stack.',
-                    'Only extract EXPLICIT information stated by the user. Do NOT infer or guess.',
-                    'If nothing worth remembering, return an empty array: []',
-                    'Return ONLY valid JSON, no explanation.',
-                ]))
-                ->withPrompt($combinedText)
-                ->asText();
+            $response = app(MemoryExtractorAgent::class)->prompt($combinedText);
 
-            $text = trim($response->text);
+            $memories = $response['memories'] ?? [];
 
-            if ($text === '' || $text === '[]') {
+            if (! is_array($memories)) {
                 return [];
             }
 
-            $text = $this->extractJsonFromText($text);
-            $decoded = json_decode($text, true);
-
-            if (! is_array($decoded)) {
-                return [];
-            }
-
-            return array_filter($decoded, fn ($item): bool => is_array($item)
+            return array_filter($memories, fn ($item): bool => is_array($item)
                 && isset($item['type'], $item['key'], $item['value'])
                 && is_string($item['type'])
                 && is_string($item['key'])
@@ -128,14 +105,5 @@ class ExtractMemoriesJob implements ShouldQueue
 
             return [];
         }
-    }
-
-    private function extractJsonFromText(string $text): string
-    {
-        if (preg_match('/```(?:json)?\s*([\s\S]*?)```/', $text, $matches) === 1) {
-            return trim($matches[1]);
-        }
-
-        return $text;
     }
 }
