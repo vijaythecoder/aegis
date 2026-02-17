@@ -40,6 +40,8 @@ Route::get('/onboarding', function () {
 Route::get('/chat', fn () => view('chat'))->name('chat');
 Route::get('/chat/{conversation}', fn (int $conversation) => view('chat', ['conversationId' => $conversation]))->name('chat.conversation');
 
+Route::get('/usage', fn () => view('usage'))->name('usage');
+
 Route::get('/settings', fn () => view('settings'))->name('settings');
 
 Route::get('/knowledge', fn () => view('knowledge'))->name('knowledge');

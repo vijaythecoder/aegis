@@ -67,6 +67,9 @@ class NativeAppServiceProvider implements ProvidesPhpIni
 
     public function phpIni(): array
     {
-        return [];
+        return [
+            'max_execution_time' => '300',
+            'memory_limit' => '512M',
+        ];
     }
 }

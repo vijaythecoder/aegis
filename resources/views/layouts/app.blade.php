@@ -11,6 +11,7 @@
     <link href="https://fonts.bunny.net/css?family=dm-sans:400,500,600,700|syne:600,700,800|jetbrains-mono:400,500" rel="stylesheet" />
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.0/dist/apexcharts.min.js" defer></script>
 </head>
 <body
     class="bg-aegis-900 text-aegis-text font-sans antialiased overflow-hidden"
@@ -55,6 +56,14 @@
                         <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>
                     </svg>
                     Knowledge Base
+                </a>
+                <a href="{{ route('usage') }}" class="no-drag flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-aegis-text-dim hover:text-aegis-text hover:bg-aegis-surface-hover transition-all duration-150 text-[13px]">
+                    <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 20V10"/>
+                        <path d="M18 20V4"/>
+                        <path d="M6 20v-4"/>
+                    </svg>
+                    Token Usage
                 </a>
                 <a href="{{ route('security') }}" class="no-drag flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-aegis-text-dim hover:text-aegis-text hover:bg-aegis-surface-hover transition-all duration-150 text-[13px]">
                     <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
