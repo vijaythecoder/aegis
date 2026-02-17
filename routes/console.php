@@ -14,3 +14,6 @@ Schedule::command('aegis:memory:consolidate')->monthly();
 Schedule::command('aegis:proactive:run')->everyMinute();
 Schedule::command('aegis:refresh-pricing')->daily();
 Schedule::command('aegis:refresh-models')->daily();
+
+// iMessage polling runs as a long-lived process: php artisan aegis:imessage:poll
+// It uses sub-minute intervals (default 5s) so it cannot use the scheduler.

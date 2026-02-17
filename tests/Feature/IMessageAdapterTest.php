@@ -1,7 +1,7 @@
 <?php
 
-use App\Messaging\Adapters\IMessageAdapter;
 use App\Messaging\AdapterCapabilities;
+use App\Messaging\Adapters\IMessageAdapter;
 use App\Messaging\IncomingMessage;
 
 beforeEach(function () {
@@ -144,4 +144,215 @@ it('confirms adapter class exists regardless of platform', function () {
         expect($this->adapter->isAvailable())->toBeTrue();
     }
     expect(class_exists(IMessageAdapter::class))->toBeTrue();
+});
+
+it('accepts custom chat db path', function () {
+    $adapter = new IMessageAdapter(chatDbPath: '/tmp/test-chat.db');
+
+    expect($adapter->getChatDbPath())->toBe('/tmp/test-chat.db');
+});
+
+it('reports chat db as inaccessible when file does not exist', function () {
+    $adapter = new IMessageAdapter(chatDbPath: '/nonexistent/chat.db');
+
+    expect($adapter->isChatDbAccessible())->toBeFalse();
+});
+
+it('returns zero max row id when db reader returns empty', function () {
+    $adapter = new IMessageAdapter(
+        dbReader: fn (string $sql, array $params) => [],
+    );
+
+    expect($adapter->getMaxRowId())->toBe(0);
+});
+
+it('returns max row id from db reader', function () {
+    $adapter = new IMessageAdapter(
+        dbReader: fn (string $sql, array $params) => [['max_id' => 42]],
+    );
+
+    expect($adapter->getMaxRowId())->toBe(42);
+});
+
+it('polls chat database and returns incoming messages', function () {
+    $fakeRows = [
+        [
+            'ROWID' => 100,
+            'text' => 'Hello from iMessage!',
+            'date' => 700000000000000000,
+            'is_from_me' => 0,
+            'handle_id' => '+15559876543',
+            'chat_identifier' => 'iMessage;-;+15559876543',
+        ],
+        [
+            'ROWID' => 101,
+            'text' => 'Second message',
+            'date' => 700000001000000000,
+            'is_from_me' => 0,
+            'handle_id' => '+15551112222',
+            'chat_identifier' => 'iMessage;-;+15551112222',
+        ],
+    ];
+
+    $adapter = new IMessageAdapter(
+        dbReader: fn (string $sql, array $params) => $fakeRows,
+    );
+
+    $result = $adapter->pollChatDatabase(99);
+
+    expect($result)->toBeArray()
+        ->and($result['messages'])->toHaveCount(2)
+        ->and($result['maxRowId'])->toBe(101)
+        ->and($result['messages'][0])->toBeInstanceOf(IncomingMessage::class)
+        ->and($result['messages'][0]->platform)->toBe('imessage')
+        ->and($result['messages'][0]->content)->toBe('Hello from iMessage!')
+        ->and($result['messages'][0]->senderId)->toBe('+15559876543')
+        ->and($result['messages'][0]->channelId)->toBe('iMessage;-;+15559876543')
+        ->and($result['messages'][1]->content)->toBe('Second message');
+});
+
+it('skips messages with empty text or handle', function () {
+    $fakeRows = [
+        [
+            'ROWID' => 200,
+            'text' => '',
+            'date' => null,
+            'is_from_me' => 0,
+            'handle_id' => '+15559876543',
+            'chat_identifier' => 'iMessage;-;+15559876543',
+        ],
+        [
+            'ROWID' => 201,
+            'text' => 'Valid message',
+            'date' => null,
+            'is_from_me' => 0,
+            'handle_id' => '',
+            'chat_identifier' => '',
+        ],
+    ];
+
+    $adapter = new IMessageAdapter(
+        dbReader: fn (string $sql, array $params) => $fakeRows,
+    );
+
+    $result = $adapter->pollChatDatabase(199);
+
+    expect($result['messages'])->toBeEmpty()
+        ->and($result['maxRowId'])->toBe(201);
+});
+
+it('returns empty messages when db reader returns empty', function () {
+    $adapter = new IMessageAdapter(
+        dbReader: fn (string $sql, array $params) => [],
+    );
+
+    $result = $adapter->pollChatDatabase(0);
+
+    expect($result['messages'])->toBeEmpty()
+        ->and($result['maxRowId'])->toBe(0);
+});
+
+it('converts apple core data timestamps correctly', function () {
+    $appleDate = 700000000000000000;
+    $expectedUnix = (int) ($appleDate / 1_000_000_000) + 978307200;
+
+    $adapter = new IMessageAdapter(
+        dbReader: fn (string $sql, array $params) => [[
+            'ROWID' => 1,
+            'text' => 'Timestamped',
+            'date' => $appleDate,
+            'is_from_me' => 0,
+            'handle_id' => '+15551234567',
+            'chat_identifier' => 'iMessage;-;+15551234567',
+        ]],
+    );
+
+    $result = $adapter->pollChatDatabase(0);
+    $msg = $result['messages'][0];
+
+    expect($msg->timestamp)->not->toBeNull()
+        ->and($msg->timestamp->timestamp)->toBe($expectedUnix);
+});
+
+it('handles null timestamps gracefully', function () {
+    $adapter = new IMessageAdapter(
+        dbReader: fn (string $sql, array $params) => [[
+            'ROWID' => 1,
+            'text' => 'No timestamp',
+            'date' => null,
+            'is_from_me' => 0,
+            'handle_id' => '+15551234567',
+            'chat_identifier' => 'iMessage;-;+15551234567',
+        ]],
+    );
+
+    $result = $adapter->pollChatDatabase(0);
+
+    expect($result['messages'][0]->timestamp)->toBeNull();
+});
+
+it('passes contact filter to sql query via params', function () {
+    $capturedParams = [];
+
+    $adapter = new IMessageAdapter(
+        dbReader: function (string $sql, array $params) use (&$capturedParams) {
+            $capturedParams = $params;
+
+            return [];
+        },
+    );
+
+    $adapter->pollChatDatabase(50, ['+15551234567', 'friend@icloud.com']);
+
+    expect($capturedParams)->toBe([50, '+15551234567', 'friend@icloud.com']);
+});
+
+it('builds IN clause for multiple contacts', function () {
+    $capturedSql = '';
+
+    $adapter = new IMessageAdapter(
+        dbReader: function (string $sql, array $params) use (&$capturedSql) {
+            $capturedSql = $sql;
+
+            return [];
+        },
+    );
+
+    $adapter->pollChatDatabase(0, ['+15551111111', '+15552222222']);
+
+    expect($capturedSql)->toContain('AND h.id IN (?, ?)');
+});
+
+it('omits contact clause when filter is empty', function () {
+    $capturedSql = '';
+
+    $adapter = new IMessageAdapter(
+        dbReader: function (string $sql, array $params) use (&$capturedSql) {
+            $capturedSql = $sql;
+
+            return [];
+        },
+    );
+
+    $adapter->pollChatDatabase(0, []);
+
+    expect($capturedSql)->not->toContain('AND h.id IN');
+});
+
+it('builds chat-id based AppleScript when channelId contains semicolons', function () {
+    $adapter = new IMessageAdapter;
+    $script = $adapter->buildSendScript('iMessage;-;+15551234567', 'Hello');
+
+    expect($script)->toContain('chat id "iMessage;-;+15551234567"')
+        ->and($script)->toContain('send "Hello" to targetChat')
+        ->and($script)->not->toContain('targetBuddy');
+});
+
+it('builds buddy based AppleScript when channelId is a plain number', function () {
+    $adapter = new IMessageAdapter;
+    $script = $adapter->buildSendScript('+15551234567', 'Hello');
+
+    expect($script)->toContain('participant "+15551234567"')
+        ->and($script)->toContain('send "Hello" to targetBuddy')
+        ->and($script)->not->toContain('targetChat');
 });

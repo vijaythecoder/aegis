@@ -70,6 +70,10 @@ class Settings extends Component
 
     public string $taskDeliveryChannel = 'chat';
 
+    public bool $imessageEnabled = false;
+
+    public string $imessageChatId = '';
+
     public function mount(): void
     {
         $this->defaultProvider = $this->getSettingValue('agent', 'default_provider')
@@ -88,12 +92,49 @@ class Settings extends Component
 
         $this->embeddingDimensions = (int) ($this->getSettingValue('memory', 'embedding_dimensions')
             ?? config('aegis.memory.embedding_dimensions', 768));
+
+        $this->imessageEnabled = (bool) ($this->getSettingValue('messaging', 'imessage_enabled')
+            ?? config('aegis.messaging.imessage.enabled', PHP_OS === 'Darwin'));
+
+        $this->imessageChatId = $this->getSettingValue('messaging', 'imessage_chat_id') ?? '';
     }
 
     public function setTab(string $tab): void
     {
         $this->activeTab = $tab;
         $this->flashMessage = '';
+    }
+
+    public function toggleIMessage(): void
+    {
+        if (PHP_OS !== 'Darwin') {
+            $this->flash('iMessage is only available on macOS.', 'error');
+
+            return;
+        }
+
+        $this->imessageEnabled = ! $this->imessageEnabled;
+        $this->saveSetting('messaging', 'imessage_enabled', $this->imessageEnabled ? '1' : '0');
+
+        config(['aegis.messaging.imessage.enabled' => $this->imessageEnabled]);
+
+        $status = $this->imessageEnabled ? 'enabled' : 'disabled';
+        $this->flash("iMessage integration {$status}.", 'success');
+    }
+
+    public function saveIMessageChatId(): void
+    {
+        $raw = trim($this->imessageChatId);
+        $this->saveSetting('messaging', 'imessage_chat_id', $raw);
+
+        $contacts = array_filter(array_map('trim', explode(',', $raw)), fn (string $c): bool => $c !== '');
+
+        if ($contacts === []) {
+            $this->flash('iMessage contact list cleared. The agent will not respond until contacts are set.', 'success');
+        } else {
+            $count = count($contacts);
+            $this->flash("iMessage agent will respond to {$count} contact".($count !== 1 ? 's' : '').'.', 'success');
+        }
     }
 
     public function saveApiKey(string $provider): void

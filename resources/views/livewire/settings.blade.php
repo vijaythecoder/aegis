@@ -37,7 +37,7 @@
     {{-- Tab Navigation --}}
     <div x-data="{ tab: $wire.entangle('activeTab') }" class="space-y-6">
         <nav class="flex gap-1 p-1 rounded-xl bg-aegis-850 border border-aegis-border">
-            @foreach (['providers' => 'Providers', 'memory' => 'Memory', 'automation' => 'Automation', 'marketplace' => 'Marketplace', 'security' => 'Security', 'general' => 'General'] as $key => $label)
+            @foreach (['providers' => 'Providers', 'memory' => 'Memory', 'automation' => 'Automation', 'messaging' => 'Messaging', 'marketplace' => 'Marketplace', 'security' => 'Security', 'general' => 'General'] as $key => $label)
                 <button
                     type="button"
                     wire:click="setTab('{{ $key }}')"
@@ -595,6 +595,184 @@
                         @endforeach
                     </div>
                 @endif
+            </div>
+        @endif
+
+        {{-- ═══ Messaging Tab ═══ --}}
+        @if ($activeTab === 'messaging')
+            <div class="space-y-8">
+
+                <div>
+                    <h3 class="text-lg font-display font-bold text-aegis-text">Messaging Integrations</h3>
+                    <p class="text-sm text-aegis-text-dim mt-1">Connect external messaging platforms to chat with Aegis.</p>
+                </div>
+
+                {{-- iMessage --}}
+                <div class="rounded-xl border border-aegis-border bg-aegis-850 p-5 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-400/20 flex items-center justify-center">
+                                <svg class="w-5 h-5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                                </svg>
+                            </div>
+                            <div>
+                                <h4 class="text-sm font-semibold text-aegis-text">iMessage</h4>
+                                <p class="text-xs text-aegis-text-dim mt-0.5">
+                                    @if (PHP_OS === 'Darwin')
+                                        Send and receive iMessages through Aegis on macOS.
+                                    @else
+                                        iMessage is only available on macOS.
+                                    @endif
+                                </p>
+                            </div>
+                        </div>
+
+                        <button
+                            type="button"
+                            wire:click="toggleIMessage"
+                            @if (PHP_OS !== 'Darwin') disabled @endif
+                            @class([
+                                'relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
+                                'bg-aegis-accent' => $imessageEnabled && PHP_OS === 'Darwin',
+                                'bg-aegis-600' => !$imessageEnabled || PHP_OS !== 'Darwin',
+                                'cursor-pointer' => PHP_OS === 'Darwin',
+                                'cursor-not-allowed opacity-50' => PHP_OS !== 'Darwin',
+                            ])
+                        >
+                            <span
+                                @class([
+                                    'pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition duration-200 ease-in-out',
+                                    'translate-x-5' => $imessageEnabled && PHP_OS === 'Darwin',
+                                    'translate-x-0' => !$imessageEnabled || PHP_OS !== 'Darwin',
+                                ])
+                            ></span>
+                        </button>
+                    </div>
+
+                    @if (PHP_OS === 'Darwin')
+                        {{-- Full Disk Access Warning --}}
+                        <div class="rounded-lg border border-amber-400/20 bg-amber-500/5 px-4 py-3">
+                            <div class="flex items-start gap-2.5">
+                                <svg class="w-4 h-4 text-amber-400 mt-0.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                                    <line x1="12" y1="9" x2="12" y2="13"/>
+                                    <line x1="12" y1="17" x2="12.01" y2="17"/>
+                                </svg>
+                                <div>
+                                    <p class="text-xs font-semibold text-amber-300">Full Disk Access Required</p>
+                                    <p class="text-xs text-amber-300/70 mt-1">
+                                        iMessage polling reads your Messages database (<span class="font-mono">chat.db</span>).
+                                        Grant Full Disk Access to Aegis in
+                                        <span class="font-semibold">System Settings &rarr; Privacy &amp; Security &rarr; Full Disk Access</span>.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- Dedicated Contact --}}
+                        @if ($imessageEnabled)
+                            <div class="rounded-lg border border-aegis-border bg-aegis-900/60 px-4 py-3 space-y-3">
+                                <div>
+                                    <label class="block text-xs font-medium text-aegis-text mb-1.5">Respond to (comma-separated)</label>
+                                    <div class="flex items-center gap-2">
+                                        <input
+                                            type="text"
+                                            wire:model="imessageChatId"
+                                            placeholder="+15551234567, friend@icloud.com"
+                                            class="flex-1 px-3 py-2 rounded-lg bg-aegis-900 border border-aegis-border text-sm text-aegis-text placeholder:text-aegis-text-dim/40 focus:outline-none focus:border-aegis-accent/40 focus:ring-1 focus:ring-aegis-accent/20 font-mono transition-colors"
+                                        />
+                                        <button
+                                            type="button"
+                                            wire:click="saveIMessageChatId"
+                                            class="px-4 py-2 rounded-lg text-xs font-semibold text-aegis-accent border border-aegis-accent/30 bg-aegis-accent/10 hover:bg-aegis-accent/20 transition-colors"
+                                        >
+                                            Save
+                                        </button>
+                                    </div>
+                                    <p class="text-[10px] text-aegis-text-dim/50 mt-1.5">
+                                        The agent will <span class="font-semibold text-aegis-text-dim">only</span> reply to messages from these contacts.
+                                        Separate multiple with commas. Leave empty to disable replies entirely.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {{-- Status --}}
+                            <div class="rounded-lg border border-aegis-border bg-aegis-900/60 px-4 py-3 space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <p class="text-xs text-aegis-text-dim">Status</p>
+                                    <div class="flex items-center gap-1.5">
+                                        <div class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
+                                        <span class="text-xs text-emerald-400 font-medium">Enabled</span>
+                                    </div>
+                                </div>
+                                @if ($imessageChatId)
+                                    @php($contactList = array_filter(array_map('trim', explode(',', $imessageChatId)), fn ($c) => $c !== ''))
+                                    <div class="flex items-center justify-between">
+                                        <p class="text-xs text-aegis-text-dim">Watching</p>
+                                        <span class="text-xs text-aegis-text font-mono">{{ count($contactList) }} contact{{ count($contactList) !== 1 ? 's' : '' }}</span>
+                                    </div>
+                                    <div class="flex flex-wrap gap-1.5 pt-1">
+                                        @foreach ($contactList as $contact)
+                                            <span class="text-[10px] px-2 py-0.5 rounded-full bg-aegis-accent/10 text-aegis-accent border border-aegis-accent/20 font-mono">{{ $contact }}</span>
+                                        @endforeach
+                                    </div>
+                                @else
+                                    <div class="flex items-center justify-between">
+                                        <p class="text-xs text-aegis-text-dim">Watching</p>
+                                        <span class="text-xs text-amber-300">No contact set — replies disabled</span>
+                                    </div>
+                                @endif
+                                <div class="flex items-center justify-between">
+                                    <p class="text-xs text-aegis-text-dim">Poll Interval</p>
+                                    <span class="text-xs text-aegis-text font-mono">{{ config('aegis.messaging.imessage.poll_interval_seconds', 5) }}s</span>
+                                </div>
+                                <p class="text-[10px] text-aegis-text-dim/50 pt-1 border-t border-aegis-border">
+                                    Start polling: <span class="font-mono">php artisan aegis:imessage:poll</span>
+                                </p>
+                            </div>
+                        @endif
+                    @else
+                        <div class="rounded-lg border border-aegis-border bg-aegis-900/60 px-4 py-3">
+                            <p class="text-xs text-aegis-text-dim">
+                                iMessage integration requires macOS. This feature is automatically disabled on {{ PHP_OS }}.
+                            </p>
+                        </div>
+                    @endif
+                </div>
+
+                {{-- Telegram (existing reference) --}}
+                <div class="rounded-xl border border-aegis-border bg-aegis-850 p-5">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-400/20 flex items-center justify-center">
+                                <svg class="w-5 h-5 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M22 2L11 13"/>
+                                    <path d="M22 2L15 22 11 13 2 9l20-7z"/>
+                                </svg>
+                            </div>
+                            <div>
+                                <h4 class="text-sm font-semibold text-aegis-text">Telegram</h4>
+                                <p class="text-xs text-aegis-text-dim mt-0.5">
+                                    @if (config('aegis.messaging.telegram.bot_token'))
+                                        Connected. Configure token in the Providers tab.
+                                    @else
+                                        Set your bot token in the Providers tab to enable.
+                                    @endif
+                                </p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            @if (config('aegis.messaging.telegram.bot_token'))
+                                <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
+                                <span class="text-xs text-emerald-400 font-medium">Configured</span>
+                            @else
+                                <div class="w-2 h-2 rounded-full bg-aegis-600"></div>
+                                <span class="text-xs text-aegis-text-dim">Not configured</span>
+                            @endif
+                        </div>
+                    </div>
+                </div>
             </div>
         @endif
 
