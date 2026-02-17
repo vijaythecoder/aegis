@@ -3,6 +3,7 @@
 namespace App\Agent;
 
 use App\Agent\Middleware\InjectMemoryContext;
+use App\Agent\Middleware\TrackTokenUsage;
 use App\Memory\UserProfileService;
 use App\Models\Setting;
 use App\Tools\KnowledgeSearchTool;
@@ -29,6 +30,10 @@ class AegisAgent implements Agent, Conversational, HasMiddleware, HasTools
     use Promptable;
     use RemembersConversations;
 
+    private ?string $overrideProvider = null;
+
+    private ?string $overrideModel = null;
+
     public function __construct(
         private readonly SystemPromptBuilder $promptBuilder,
         private readonly ToolRegistry $toolRegistry,
@@ -38,11 +43,28 @@ class AegisAgent implements Agent, Conversational, HasMiddleware, HasTools
 
     public function forConversation(string|int $conversationId, bool $withStorage = true): static
     {
+        $this->overrideProvider = null;
+        $this->overrideModel = null;
+
         if ($withStorage) {
             return $this->continue((string) $conversationId, new ConversationUser);
         }
 
         $this->conversationId = (string) $conversationId;
+
+        return $this;
+    }
+
+    public function withProvider(?string $provider): static
+    {
+        $this->overrideProvider = $provider;
+
+        return $this;
+    }
+
+    public function withModel(?string $model): static
+    {
+        $this->overrideModel = $model;
 
         return $this;
     }
@@ -112,13 +134,27 @@ class AegisAgent implements Agent, Conversational, HasMiddleware, HasTools
      */
     private function resolvedProvider(): array
     {
-        return $this->providerManager->resolve();
+        return $this->providerManager->resolve($this->overrideProvider, $this->overrideModel);
     }
 
     public function timeout(): int
     {
         return (int) config('aegis.agent.timeout', 120);
     }
+
+    /**
+     * Providers that act as proxies and don't natively support FileSearch.
+     *
+     * @var list<string>
+     */
+    private const array FILE_SEARCH_EXCLUDED_PROVIDERS = [
+        'openrouter',
+        'groq',
+        'deepseek',
+        'ollama',
+        'mistral',
+        'xai',
+    ];
 
     public function tools(): iterable
     {
@@ -131,10 +167,13 @@ class AegisAgent implements Agent, Conversational, HasMiddleware, HasTools
 
         if ($storeIds !== []) {
             $providerName = $this->resolvedProvider()[0];
-            $provider = Ai::textProviderFor($this, $providerName);
 
-            if ($provider instanceof SupportsFileSearch) {
-                $tools[] = new FileSearch($storeIds);
+            if (! in_array($providerName, self::FILE_SEARCH_EXCLUDED_PROVIDERS, true)) {
+                $provider = Ai::textProviderFor($this, $providerName);
+
+                if ($provider instanceof SupportsFileSearch) {
+                    $tools[] = new FileSearch($storeIds);
+                }
             }
         }
 
@@ -145,6 +184,7 @@ class AegisAgent implements Agent, Conversational, HasMiddleware, HasTools
     {
         return [
             app(InjectMemoryContext::class),
+            app(TrackTokenUsage::class),
         ];
     }
 

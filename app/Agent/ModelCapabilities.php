@@ -2,6 +2,8 @@
 
 namespace App\Agent;
 
+use App\Services\OpenRouterModelService;
+
 class ModelCapabilities
 {
     public function contextWindow(string $provider, string $model): int
@@ -37,6 +39,14 @@ class ModelCapabilities
 
     public function modelsForProvider(string $provider): array
     {
+        if ($provider === 'openrouter') {
+            $dynamic = app(OpenRouterModelService::class)->getModelIds();
+
+            if ($dynamic !== []) {
+                return $dynamic;
+            }
+        }
+
         return array_keys(config("aegis.providers.{$provider}.models", []));
     }
 
@@ -55,6 +65,20 @@ class ModelCapabilities
 
     private function modelConfig(string $provider, string $model): array
     {
+        if ($provider === 'openrouter') {
+            $details = app(OpenRouterModelService::class)->getModelDetails($model);
+
+            if ($details !== null) {
+                return [
+                    'context_window' => $details['context_length'],
+                    'tools' => $details['tools'],
+                    'vision' => $details['vision'],
+                    'streaming' => $details['streaming'],
+                    'structured_output' => $details['structured_output'],
+                ];
+            }
+        }
+
         return config("aegis.providers.{$provider}.models.{$model}", []);
     }
 }

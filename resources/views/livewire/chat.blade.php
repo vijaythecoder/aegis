@@ -159,6 +159,28 @@
 
     <div class="shrink-0 border-t border-aegis-border bg-aegis-900/80 backdrop-blur-sm p-4">
         <div class="max-w-3xl mx-auto">
+            <div class="flex items-center gap-2 mb-2 text-xs">
+                <span class="text-aegis-text-dim shrink-0">Model:</span>
+                <select
+                    wire:model.live="selectedProvider"
+                    class="bg-aegis-surface border border-aegis-border rounded-md px-2 py-1 text-xs text-aegis-text focus:border-aegis-accent/40 focus:outline-none disabled:opacity-50"
+                    @if($isThinking) disabled @endif
+                >
+                    @foreach ($availableProviders as $providerId => $providerName)
+                        <option value="{{ $providerId }}">{{ $providerName }}</option>
+                    @endforeach
+                </select>
+                <span class="text-aegis-border">/</span>
+                <select
+                    wire:model.live="selectedModel"
+                    class="bg-aegis-surface border border-aegis-border rounded-md px-2 py-1 text-xs text-aegis-text focus:border-aegis-accent/40 focus:outline-none flex-1 min-w-0 truncate disabled:opacity-50"
+                    @if($isThinking) disabled @endif
+                >
+                    @foreach ($availableModels as $modelId)
+                        <option value="{{ $modelId }}">{{ $modelId }}</option>
+                    @endforeach
+                </select>
+            </div>
             <form wire:submit="sendMessage">
                 <div class="relative flex items-end gap-3 rounded-xl border border-aegis-border bg-aegis-surface p-2 focus-within:border-aegis-accent/40 transition-colors">
                     <textarea

@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Agent\ProviderManager;
 use App\Memory\MessageService;
+use App\Models\Conversation;
 use Livewire\Attributes\On;
 use Livewire\Component;
 
@@ -40,6 +41,9 @@ class AgentStatus extends Component
         $this->refreshTokenCount();
     }
 
+    #[On('model-changed')]
+    public function onModelChanged(string $provider, string $model): void {}
+
     public function render()
     {
         $contextWindow = (int) config('aegis.agent.context_window', 200000);
@@ -61,7 +65,21 @@ class AgentStatus extends Component
             default => 'w-0',
         };
 
-        [$resolvedProvider, $resolvedModel] = app(ProviderManager::class)->resolve();
+        $resolvedProvider = null;
+        $resolvedModel = null;
+
+        if ($this->conversationId !== null) {
+            $conversation = Conversation::query()->find($this->conversationId);
+
+            if ($conversation instanceof Conversation && $conversation->provider) {
+                $resolvedProvider = $conversation->provider;
+                $resolvedModel = $conversation->model;
+            }
+        }
+
+        if ($resolvedProvider === null) {
+            [$resolvedProvider, $resolvedModel] = app(ProviderManager::class)->resolve();
+        }
 
         return view('livewire.agent-status', [
             'provider' => $resolvedProvider,

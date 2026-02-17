@@ -152,58 +152,8 @@ return [
         'openrouter' => [
             'name' => 'OpenRouter',
             'pricing_tier' => 'flexible',
-            'models' => [
-                'anthropic/claude-sonnet-4' => [
-                    'context_window' => 200000,
-                    'tools' => true,
-                    'vision' => true,
-                    'streaming' => true,
-                    'structured_output' => true,
-                ],
-                'anthropic/claude-sonnet-4.5' => [
-                    'context_window' => 200000,
-                    'tools' => true,
-                    'vision' => true,
-                    'streaming' => true,
-                    'structured_output' => true,
-                ],
-                'anthropic/claude-haiku-4.5' => [
-                    'context_window' => 200000,
-                    'tools' => true,
-                    'vision' => true,
-                    'streaming' => true,
-                    'structured_output' => true,
-                ],
-                'openai/gpt-4o' => [
-                    'context_window' => 128000,
-                    'tools' => true,
-                    'vision' => true,
-                    'streaming' => true,
-                    'structured_output' => true,
-                ],
-                'google/gemini-2.5-pro' => [
-                    'context_window' => 1048576,
-                    'tools' => true,
-                    'vision' => true,
-                    'streaming' => true,
-                    'structured_output' => true,
-                ],
-                'google/gemini-2.5-flash' => [
-                    'context_window' => 1048576,
-                    'tools' => true,
-                    'vision' => true,
-                    'streaming' => true,
-                    'structured_output' => true,
-                ],
-                'deepseek/deepseek-chat' => [
-                    'context_window' => 64000,
-                    'tools' => true,
-                    'vision' => false,
-                    'streaming' => true,
-                    'structured_output' => true,
-                ],
-            ],
-            'default_model' => 'anthropic/claude-sonnet-4',
+            'models' => [],
+            'default_model' => env('AEGIS_OPENROUTER_DEFAULT_MODEL', 'anthropic/claude-sonnet-4'),
         ],
         'xai' => [
             'name' => 'xAI (Grok)',
@@ -357,6 +307,16 @@ return [
             'imessage' => App\Messaging\Adapters\IMessageAdapter::class,
             'signal' => App\Messaging\Adapters\SignalAdapter::class,
         ],
+    ],
+
+    'pricing' => [
+        'api_url' => env('AEGIS_PRICING_API_URL', 'https://models.dev/api.json'),
+        'cache_ttl_hours' => (int) env('AEGIS_PRICING_CACHE_TTL_HOURS', 24),
+    ],
+
+    'openrouter' => [
+        'models_api_url' => env('AEGIS_OPENROUTER_MODELS_URL', 'https://openrouter.ai/api/v1/models'),
+        'cache_ttl_hours' => (int) env('AEGIS_OPENROUTER_CACHE_TTL_HOURS', 24),
     ],
 
     'ui' => [
