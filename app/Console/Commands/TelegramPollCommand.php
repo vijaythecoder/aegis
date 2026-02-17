@@ -10,6 +10,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Symfony\Component\Console\Command\Command as CommandStatus;
 
 class TelegramPollCommand extends Command
 {
@@ -29,12 +30,30 @@ class TelegramPollCommand extends Command
             $this->warn('NativePHP database not found. Using default database.');
         }
 
+        $lockPath = storage_path('framework/telegram-poll.lock');
+        $lockHandle = fopen($lockPath, 'c+');
+
+        if ($lockHandle === false || ! flock($lockHandle, LOCK_EX | LOCK_NB)) {
+            $this->warn('Another telegram:poll process is already running. Exiting.');
+
+            return CommandStatus::SUCCESS;
+        }
+
+        fwrite($lockHandle, (string) getmypid());
+        fflush($lockHandle);
+
+        register_shutdown_function(function () use ($lockHandle, $lockPath): void {
+            flock($lockHandle, LOCK_UN);
+            fclose($lockHandle);
+            @unlink($lockPath);
+        });
+
         $token = (string) config('aegis.messaging.telegram.bot_token', '');
 
         if ($token === '') {
             $this->error('Telegram bot token not configured. Set it in Settings > Messaging.');
 
-            return self::FAILURE;
+            return CommandStatus::FAILURE;
         }
 
         $interval = max(1, (int) $this->option('interval'));
@@ -59,7 +78,7 @@ class TelegramPollCommand extends Command
             sleep($interval);
         }
 
-        return self::SUCCESS; // @phpstan-ignore deadCode.unreachable
+        return CommandStatus::SUCCESS; // @phpstan-ignore deadCode.unreachable
     }
 
     private function poll(string $baseUrl): void
