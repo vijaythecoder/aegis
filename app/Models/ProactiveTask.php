@@ -7,6 +7,8 @@ use Cron\CronExpression;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class ProactiveTask extends Model
 {
@@ -57,6 +59,16 @@ class ProactiveTask extends Model
             'last_run_at' => now(),
             'next_run_at' => $cron->getNextRunDate(),
         ]);
+    }
+
+    public function runs(): HasMany
+    {
+        return $this->hasMany(ProactiveTaskRun::class);
+    }
+
+    public function latestRun(): HasOne
+    {
+        return $this->hasOne(ProactiveTaskRun::class)->latestOfMany();
     }
 
     public function scopeActive($query)

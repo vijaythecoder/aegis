@@ -7,7 +7,9 @@ use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\MessagingChannel;
 use App\Models\ProactiveTask;
+use App\Models\ProactiveTaskRun;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Throwable;
 
 class ProactiveTaskRunner
@@ -41,19 +43,111 @@ class ProactiveTaskRunner
 
     public function runTask(ProactiveTask $task): string
     {
-        $response = $this->agent->prompt($task->prompt);
+        $startedAt = now();
 
-        $this->deliver($task, $response->text);
+        $run = ProactiveTaskRun::query()->create([
+            'proactive_task_id' => $task->id,
+            'status' => 'success',
+            'started_at' => $startedAt,
+            'delivery_status' => 'pending',
+        ]);
 
-        return $response->text;
+        try {
+            $response = $this->agent->prompt($task->prompt);
+
+            $tokensUsed = $response->usage->promptTokens + $response->usage->completionTokens;
+            $summary = $this->buildSummary($task, $response->text, $tokensUsed);
+
+            $run->update([
+                'completed_at' => now(),
+                'response_summary' => $summary,
+                'tokens_used' => $tokensUsed,
+                'estimated_cost' => $this->estimateCost($response),
+            ]);
+
+            $deliveryStatus = $this->deliver($task, $response->text);
+
+            $run->update(['delivery_status' => $deliveryStatus]);
+
+            return $response->text;
+        } catch (Throwable $e) {
+            $run->update([
+                'status' => 'failed',
+                'completed_at' => now(),
+                'error_message' => Str::limit($e->getMessage(), 500),
+                'delivery_status' => 'failed',
+            ]);
+
+            $this->deliverFailureAlert($task, $e);
+
+            throw $e;
+        }
     }
 
-    private function deliver(ProactiveTask $task, string $content): void
+    private function buildSummary(ProactiveTask $task, string $responseText, int $tokensUsed): string
     {
-        match ($task->delivery_channel) {
-            'telegram' => $this->deliverToTelegram($task, $content),
-            default => $this->deliverToChat($task, $content),
-        };
+        $preview = Str::limit($responseText, 300);
+
+        return "[{$task->name}] {$preview} (tokens: {$tokensUsed})";
+    }
+
+    private function estimateCost($response): float
+    {
+        try {
+            $costEstimator = app(\App\Services\CostEstimator::class);
+
+            $costData = $costEstimator->estimate(
+                provider: $response->meta->provider ?? 'unknown',
+                model: $response->meta->model ?? 'unknown',
+                promptTokens: $response->usage->promptTokens,
+                completionTokens: $response->usage->completionTokens,
+                cacheReadTokens: $response->usage->cacheReadInputTokens,
+                cacheWriteTokens: $response->usage->cacheWriteInputTokens,
+                reasoningTokens: $response->usage->reasoningTokens,
+            );
+
+            return (float) ($costData['estimated_cost'] ?? 0);
+        } catch (Throwable) {
+            return 0;
+        }
+    }
+
+    private function deliver(ProactiveTask $task, string $content): string
+    {
+        try {
+            match ($task->delivery_channel) {
+                'telegram' => $this->deliverToTelegram($task, $content),
+                default => $this->deliverToChat($task, $content),
+            };
+
+            return 'sent';
+        } catch (Throwable $e) {
+            Log::warning('aegis.proactive.delivery_failed', [
+                'task' => $task->name,
+                'channel' => $task->delivery_channel,
+                'error' => $e->getMessage(),
+            ]);
+
+            if ($task->delivery_channel !== 'chat') {
+                $this->deliverToChat($task, $content);
+            }
+
+            return 'fallback';
+        }
+    }
+
+    private function deliverFailureAlert(ProactiveTask $task, Throwable $error): void
+    {
+        try {
+            $alertContent = "⚠ Automation \"{$task->name}\" failed: {$error->getMessage()}";
+
+            $this->deliverToChat($task, $alertContent);
+        } catch (Throwable $e) {
+            Log::error('aegis.proactive.failure_alert_failed', [
+                'task' => $task->name,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     private function deliverToChat(ProactiveTask $task, string $content): void
@@ -87,14 +181,6 @@ class ProactiveTaskRunner
             return;
         }
 
-        try {
-            app(TelegramAdapter::class)->sendMessage($channel->platform_channel_id, $content, null);
-        } catch (Throwable $e) {
-            Log::warning('aegis.proactive.telegram_failed', [
-                'task' => $task->name,
-                'error' => $e->getMessage(),
-            ]);
-            $this->deliverToChat($task, $content);
-        }
+        app(TelegramAdapter::class)->sendMessage($channel->platform_channel_id, $content, null);
     }
 }

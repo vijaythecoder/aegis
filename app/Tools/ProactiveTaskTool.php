@@ -3,6 +3,7 @@
 namespace App\Tools;
 
 use App\Models\ProactiveTask;
+use App\Models\ProactiveTaskRun;
 use Cron\CronExpression;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
@@ -23,18 +24,19 @@ class ProactiveTaskTool implements Tool
 
     public function description(): Stringable|string
     {
-        return 'Create, list, update, delete, or toggle automated tasks that run on a schedule. '
+        return 'Create, list, update, delete, toggle, or view history of automated tasks that run on a schedule. '
             .'Use this when the user wants recurring actions like morning briefings, reminders, or digests. '
             .'ALWAYS call list first to check existing tasks before creating — duplicates with the same schedule and channel are rejected. '
             .'The schedule must be a valid cron expression (e.g., "0 8 * * *" for daily at 8am, "0 8 * * 1-5" for weekdays at 8am, "0 9 * * 1" for Mondays at 9am). '
             .'Delivery channels: "chat" (in-app notification) or "telegram" (Telegram message). '
+            .'Use "history" to view past execution logs for a task. Use "digest" to get a summary of all automations that ran today. '
             .'For bulk delete or toggle, pass task_ids as comma-separated IDs (e.g., "6,7,8") or "all".';
     }
 
     public function schema(JsonSchema $schema): array
     {
         return [
-            'action' => $schema->string()->enum(['create', 'list', 'update', 'delete', 'toggle'])->description('The action to perform.')->required(),
+            'action' => $schema->string()->enum(['create', 'list', 'update', 'delete', 'toggle', 'history', 'digest'])->description('The action to perform.')->required(),
             'name' => $schema->string()->description('Short descriptive name for the task (required for create, optional for update).'),
             'schedule' => $schema->string()->description('Cron expression for when to run. Examples: "0 8 * * *" (daily 8am), "0 8 * * 1-5" (weekdays 8am), "30 9 * * 1" (Mondays 9:30am), "0 18 * * 0" (Sundays 6pm). Times are in the user\'s local timezone.'),
             'prompt' => $schema->string()->description('The instruction for what the AI should do when the task runs (required for create).'),
@@ -42,6 +44,7 @@ class ProactiveTaskTool implements Tool
             'task_id' => $schema->integer()->description('ID of a single task to update, delete, or toggle. For bulk operations, use task_ids instead.'),
             'task_ids' => $schema->string()->description('Comma-separated list of task IDs for bulk delete or toggle (e.g., "6,7,8,9"). Use "all" to target every task.'),
             'is_active' => $schema->boolean()->description('Whether to activate the task immediately on creation. Default: true.'),
+            'limit' => $schema->integer()->description('Number of history entries to return (default: 10). Used with "history" action.'),
         ];
     }
 
@@ -55,7 +58,9 @@ class ProactiveTaskTool implements Tool
             'update' => $this->updateTask($request),
             'delete' => $this->deleteTask($request),
             'toggle' => $this->toggleTask($request),
-            default => "Unknown action: {$action}. Use create, list, update, delete, or toggle.",
+            'history' => $this->taskHistory($request),
+            'digest' => $this->dailyDigest(),
+            default => "Unknown action: {$action}. Use create, list, update, delete, toggle, history, or digest.",
         };
     }
 
@@ -126,7 +131,7 @@ class ProactiveTaskTool implements Tool
 
     private function listTasks(): string
     {
-        $tasks = ProactiveTask::query()->orderBy('id')->get();
+        $tasks = ProactiveTask::query()->with('latestRun')->orderBy('id')->get();
 
         if ($tasks->isEmpty()) {
             return 'No automated tasks configured.';
@@ -137,7 +142,18 @@ class ProactiveTaskTool implements Tool
             $nextRun = $task->next_run_at?->format('D M j, g:ia') ?? 'not scheduled';
             $schedule = $this->describeCron($task->schedule);
 
-            return "[ID:{$task->id}] {$task->name} ({$status}) — {$schedule}, via {$task->delivery_channel}. Next: {$nextRun}. Prompt: \"{$task->prompt}\"";
+            $lastRunInfo = '';
+            if ($task->latestRun) {
+                $runStatus = match ($task->latestRun->status) {
+                    'success' => '✅',
+                    'failed' => '❌',
+                    default => '⏸',
+                };
+                $runTime = $task->latestRun->created_at?->format('M j g:ia') ?? 'unknown';
+                $lastRunInfo = " Last run: {$runStatus} {$runTime}.";
+            }
+
+            return "[ID:{$task->id}] {$task->name} ({$status}) — {$schedule}, via {$task->delivery_channel}. Next: {$nextRun}.{$lastRunInfo} Prompt: \"{$task->prompt}\"";
         })->implode("\n");
     }
 
@@ -254,6 +270,89 @@ class ProactiveTaskTool implements Tool
         }
 
         return 'Toggled '.count($results)." automation(s):\n".implode("\n", $results);
+    }
+
+    private function taskHistory(Request $request): string
+    {
+        $taskId = $request->integer('task_id');
+        $limit = $request->integer('limit', 10);
+
+        if ($taskId === 0) {
+            return 'History requires task_id. Use "list" first to find the task ID.';
+        }
+
+        $task = ProactiveTask::query()->find($taskId);
+
+        if (! $task instanceof ProactiveTask) {
+            return "No task found with ID {$taskId}.";
+        }
+
+        $runs = ProactiveTaskRun::query()
+            ->where('proactive_task_id', $taskId)
+            ->orderByDesc('created_at')
+            ->limit($limit)
+            ->get();
+
+        if ($runs->isEmpty()) {
+            return "No execution history for \"{$task->name}\" (ID:{$taskId}).";
+        }
+
+        $header = "Execution history for \"{$task->name}\" (last {$runs->count()} runs):";
+
+        $rows = $runs->map(function (ProactiveTaskRun $run) {
+            $statusIcon = $run->status === 'success' ? '✅' : '❌';
+            $time = $run->started_at?->format('M j g:ia') ?? 'unknown';
+            $duration = $run->durationInSeconds();
+            $durationStr = $duration !== null ? "{$duration}s" : '?';
+            $tokens = $run->tokens_used > 0 ? "{$run->tokens_used} tokens" : 'n/a';
+            $cost = $run->estimated_cost > 0 ? '$'.number_format((float) $run->estimated_cost, 4) : 'free';
+
+            $line = "{$statusIcon} {$time} ({$durationStr}, {$tokens}, {$cost})";
+
+            if ($run->status === 'failed' && $run->error_message) {
+                $line .= " — Error: {$run->error_message}";
+            } elseif ($run->response_summary) {
+                $line .= " — {$run->response_summary}";
+            }
+
+            return $line;
+        })->implode("\n");
+
+        return "{$header}\n{$rows}";
+    }
+
+    private function dailyDigest(): string
+    {
+        $runs = ProactiveTaskRun::query()
+            ->with('task')
+            ->today()
+            ->orderBy('created_at')
+            ->get();
+
+        if ($runs->isEmpty()) {
+            return 'No automations have run today.';
+        }
+
+        $successful = $runs->where('status', 'success')->count();
+        $failed = $runs->where('status', 'failed')->count();
+        $totalTokens = $runs->sum('tokens_used');
+        $totalCost = $runs->sum('estimated_cost');
+
+        $header = "Today's automation digest: {$runs->count()} runs ({$successful} ✅, {$failed} ❌), {$totalTokens} tokens, \$".number_format((float) $totalCost, 4).' spent.';
+
+        $rows = $runs->map(function (ProactiveTaskRun $run) {
+            $statusIcon = $run->status === 'success' ? '✅' : '❌';
+            $taskName = $run->task?->name ?? 'Unknown task';
+            $time = $run->started_at?->format('g:ia') ?? '?';
+
+            if ($run->status === 'failed') {
+                return "{$statusIcon} {$time} \"{$taskName}\" — Error: {$run->error_message}";
+            }
+
+            return "{$statusIcon} {$time} \"{$taskName}\" — {$run->response_summary}";
+        })->implode("\n");
+
+        return "{$header}\n\n{$rows}";
     }
 
     /**
