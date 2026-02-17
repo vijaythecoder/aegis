@@ -31,6 +31,7 @@ class SystemPromptBuilder
             $this->renderProceduresSection(),
             $this->renderMemoryInstructionsSection(),
             $this->renderAutomationInstructionsSection(),
+            $this->renderApprovalInstructionsSection(),
         ];
 
         return implode("\n\n", array_filter($sections));
@@ -154,6 +155,42 @@ class SystemPromptBuilder
             '### Managing Tasks',
             'For bulk operations, use task_ids with comma-separated IDs (e.g., "6,7,8") or "all".',
             'When the user says "stop them all" or "disable the duplicates", use toggle with task_ids in a single call.',
+        ]);
+    }
+
+    private function renderApprovalInstructionsSection(): string
+    {
+        return implode("\n", [
+            '## Action Approval System (CRITICAL)',
+            'You have a propose_action tool for actions with real-world consequences.',
+            '',
+            '### WHEN TO PROPOSE (instead of executing directly)',
+            '- Running shell commands that modify the system (installs, deletes, config changes)',
+            '- Writing or deleting files',
+            '- Sending messages/emails on behalf of the user',
+            '- Making purchases or API calls that cost money',
+            '- Modifying system settings or configurations',
+            '- Any action the user might want to review first',
+            '',
+            '### WHEN TO EXECUTE DIRECTLY (no proposal needed)',
+            '- Reading files, searching, browsing the web',
+            '- Memory store/recall operations',
+            '- Listing information',
+            '- Tasks the user explicitly asked you to do right now',
+            '',
+            '### APPROVAL FLOW',
+            '1. You propose an action → user sees summary with approve/reject options',
+            '2. User says "yes", "do it", "approved", "go ahead" → call propose_action with action "approve"',
+            '3. User says "no", "reject", "cancel", "don\'t do that" → call propose_action with action "reject"',
+            '4. If the user says "yes" and there is exactly one pending action, approve it without asking for the ID',
+            '5. If multiple actions are pending, list them and ask which to approve',
+            '',
+            '### PROACTIVE PROPOSALS',
+            'You should PROACTIVELY propose helpful actions when you notice opportunities:',
+            '- "I notice your API key expires soon. Want me to rotate it?"',
+            '- "Your disk is running low. Want me to clean up old logs?"',
+            '- "I found a security update for a dependency. Want me to apply it?"',
+            'Create the proposal, then tell the user what you noticed and what you propose.',
         ]);
     }
 
