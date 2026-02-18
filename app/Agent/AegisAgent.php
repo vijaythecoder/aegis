@@ -23,7 +23,7 @@ use Laravel\Ai\Providers\Tools\FileSearch;
 use Laravel\Ai\Providers\Tools\ProviderTool;
 use Stringable;
 
-#[MaxSteps(10)]
+#[MaxSteps(50)]
 #[Timeout(120)]
 class AegisAgent implements Agent, Conversational, HasMiddleware, HasTools
 {
@@ -43,14 +43,19 @@ class AegisAgent implements Agent, Conversational, HasMiddleware, HasTools
 
     public function forConversation(string|int $conversationId, bool $withStorage = true): static
     {
-        $this->overrideProvider = null;
-        $this->overrideModel = null;
-
         if ($withStorage) {
+            $this->overrideProvider = null;
+            $this->overrideModel = null;
+
             return $this->continue((string) $conversationId, new ConversationUser);
         }
 
+        // Without storage: bind to conversation for context loading only.
+        // Preserve provider/model overrides set by the caller and clear
+        // conversationUser so the SDK's RememberConversation middleware
+        // does not duplicate message storage.
         $this->conversationId = (string) $conversationId;
+        $this->conversationUser = null;
 
         return $this;
     }

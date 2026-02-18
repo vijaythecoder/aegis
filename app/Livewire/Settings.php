@@ -23,6 +23,7 @@ use Illuminate\Support\Collection;
 use InvalidArgumentException;
 use Livewire\Attributes\Url;
 use Livewire\Component;
+use Native\Laravel\Facades\ChildProcess;
 use Throwable;
 
 class Settings extends Component
@@ -72,6 +73,8 @@ class Settings extends Component
 
     public bool $imessageEnabled = false;
 
+    public bool $telegramEnabled = false;
+
     public string $imessageChatId = '';
 
     public function mount(): void
@@ -96,6 +99,12 @@ class Settings extends Component
         $this->imessageEnabled = (bool) ($this->getSettingValue('messaging', 'imessage_enabled')
             ?? config('aegis.messaging.imessage.enabled', PHP_OS === 'Darwin'));
 
+        $this->telegramEnabled = (bool) $this->getSettingValue('messaging', 'telegram_enabled');
+
+        if ($this->telegramEnabled === false && config('aegis.messaging.telegram.bot_token')) {
+            $this->telegramEnabled = true;
+        }
+
         $this->imessageChatId = $this->getSettingValue('messaging', 'imessage_chat_id') ?? '';
     }
 
@@ -115,11 +124,47 @@ class Settings extends Component
 
         $this->imessageEnabled = ! $this->imessageEnabled;
         $this->saveSetting('messaging', 'imessage_enabled', $this->imessageEnabled ? '1' : '0');
-
         config(['aegis.messaging.imessage.enabled' => $this->imessageEnabled]);
+
+        try {
+            if ($this->imessageEnabled) {
+                ChildProcess::artisan(['aegis:imessage:poll'], 'imessage-poller', persistent: true);
+            } else {
+                ChildProcess::stop('imessage-poller');
+            }
+        } catch (Throwable $e) {
+            \Illuminate\Support\Facades\Log::debug('iMessage process control failed', ['error' => $e->getMessage()]);
+        }
 
         $status = $this->imessageEnabled ? 'enabled' : 'disabled';
         $this->flash("iMessage integration {$status}.", 'success');
+    }
+
+    public function toggleTelegram(): void
+    {
+        $token = (string) config('aegis.messaging.telegram.bot_token', '');
+
+        if ($token === '') {
+            $this->flash('Set your Telegram bot token in the Providers tab first.', 'error');
+
+            return;
+        }
+
+        $this->telegramEnabled = ! $this->telegramEnabled;
+        $this->saveSetting('messaging', 'telegram_enabled', $this->telegramEnabled ? '1' : '0');
+
+        try {
+            if ($this->telegramEnabled) {
+                ChildProcess::artisan(['telegram:poll'], 'telegram-poller', persistent: true);
+            } else {
+                ChildProcess::stop('telegram-poller');
+            }
+        } catch (Throwable $e) {
+            \Illuminate\Support\Facades\Log::debug('Telegram process control failed', ['error' => $e->getMessage()]);
+        }
+
+        $status = $this->telegramEnabled ? 'enabled' : 'disabled';
+        $this->flash("Telegram integration {$status}.", 'success');
     }
 
     public function saveIMessageChatId(): void
@@ -611,10 +656,21 @@ class Settings extends Component
             'marketplacePlugins' => $marketplacePlugins,
             'installedPlugins' => $this->installedPlugins(),
             'marketplaceUpdates' => $marketplaceUpdates,
+            'imessagePollerRunning' => $this->isPollerRunning('imessage-poller'),
+            'telegramPollerRunning' => $this->isPollerRunning('telegram-poller'),
             'memories' => $this->activeTab === 'memory' ? app(MemoryService::class)->all() : collect(),
             'userProfile' => $this->activeTab === 'memory' ? app(UserProfileService::class)->getProfile() : null,
             'proactiveTasks' => $this->activeTab === 'automation' ? ProactiveTask::query()->orderBy('name')->get() : collect(),
         ]);
+    }
+
+    private function isPollerRunning(string $alias): bool
+    {
+        try {
+            return ChildProcess::get($alias) !== null;
+        } catch (Throwable) {
+            return false;
+        }
     }
 
     private function flash(string $message, string $type): void

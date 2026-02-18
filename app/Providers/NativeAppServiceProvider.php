@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Models\Setting;
 use Native\Laravel\Contracts\ProvidesPhpIni;
 use Native\Laravel\Facades\ChildProcess;
 use Native\Laravel\Facades\Menu;
@@ -54,14 +55,34 @@ class NativeAppServiceProvider implements ProvidesPhpIni
             persistent: true,
         );
 
+        $telegramEnabled = Setting::query()
+            ->where('group', 'messaging')
+            ->where('key', 'telegram_enabled')
+            ->value('value');
+
         $telegramToken = (string) config('aegis.messaging.telegram.bot_token', '');
 
-        if ($telegramToken !== '') {
+        if ($telegramToken !== '' && $telegramEnabled !== '0') {
             ChildProcess::artisan(
                 ['telegram:poll'],
                 'telegram-poller',
                 persistent: true,
             );
+        }
+
+        if (PHP_OS === 'Darwin') {
+            $imessageEnabled = Setting::query()
+                ->where('group', 'messaging')
+                ->where('key', 'imessage_enabled')
+                ->value('value');
+
+            if ($imessageEnabled === '1') {
+                ChildProcess::artisan(
+                    ['aegis:imessage:poll'],
+                    'imessage-poller',
+                    persistent: true,
+                );
+            }
         }
     }
 

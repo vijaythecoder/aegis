@@ -67,7 +67,7 @@ class SystemPromptBuilder
             ->values();
 
         if ($preferences->isEmpty()) {
-            return '';
+            return "User preferences:\n- none";
         }
 
         return "User preferences:\n{$preferences->implode("\n")}";
@@ -116,12 +116,12 @@ class SystemPromptBuilder
     private function renderMemoryInstructionsSection(): string
     {
         return implode("\n", [
-            '## Memory Recall',
-            'You have access to a persistent memory system across all conversations.',
-            'MANDATORY: Before answering any question that might reference past context, use the memory_recall tool to search for relevant information.',
-            'MANDATORY: When the user shares important personal info, preferences, or project details, use the memory_store tool to save it.',
-            'Examples of when to search: "like we discussed", "remember when", "my project", "as I mentioned", or any question about the user\'s background.',
-            'Examples of when to store: user shares their name, job, tech stack, project details, preferences, or corrections.',
+            '## Memory System (Automatic)',
+            'You have a persistent memory system that works automatically across all conversations.',
+            'Relevant memories are auto-recalled and injected before each message — you do NOT need to search manually.',
+            'Important facts, preferences, and notes from conversations are automatically extracted and stored in the background after each exchange.',
+            'If the user corrects a stored fact (e.g., "my name is actually X"), acknowledge the correction — it will be updated automatically.',
+            'Focus on answering the user\'s question using any recalled memories shown above.',
         ]);
     }
 

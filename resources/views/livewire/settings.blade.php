@@ -727,9 +727,21 @@
                                     <p class="text-xs text-aegis-text-dim">Poll Interval</p>
                                     <span class="text-xs text-aegis-text font-mono">{{ config('aegis.messaging.imessage.poll_interval_seconds', 5) }}s</span>
                                 </div>
-                                <p class="text-[10px] text-aegis-text-dim/50 pt-1 border-t border-aegis-border">
-                                    Start polling: <span class="font-mono">php artisan aegis:imessage:poll</span>
-                                </p>
+                                <div class="flex items-center justify-between pt-1 border-t border-aegis-border">
+                                    <p class="text-xs text-aegis-text-dim">Poller Process</p>
+                                    <div class="flex items-center gap-1.5">
+                                        <div @class([
+                                            'w-2 h-2 rounded-full',
+                                            'bg-emerald-400' => $imessagePollerRunning,
+                                            'bg-amber-300' => ! $imessagePollerRunning,
+                                        ])></div>
+                                        <span @class([
+                                            'text-xs font-medium',
+                                            'text-emerald-400' => $imessagePollerRunning,
+                                            'text-amber-300' => ! $imessagePollerRunning,
+                                        ])>{{ $imessagePollerRunning ? 'Running' : 'Stopped' }}</span>
+                                    </div>
+                                </div>
                             </div>
                         @endif
                     @else
@@ -743,6 +755,7 @@
 
                 {{-- Telegram (existing reference) --}}
                 <div class="rounded-xl border border-aegis-border bg-aegis-850 p-5">
+                    @php($telegramConfigured = (string) config('aegis.messaging.telegram.bot_token', '') !== '')
                     <div class="flex items-center justify-between">
                         <div class="flex items-center gap-3">
                             <div class="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-400/20 flex items-center justify-center">
@@ -754,7 +767,7 @@
                             <div>
                                 <h4 class="text-sm font-semibold text-aegis-text">Telegram</h4>
                                 <p class="text-xs text-aegis-text-dim mt-0.5">
-                                    @if (config('aegis.messaging.telegram.bot_token'))
+                                    @if ($telegramConfigured)
                                         Connected. Configure token in the Providers tab.
                                     @else
                                         Set your bot token in the Providers tab to enable.
@@ -762,16 +775,70 @@
                                 </p>
                             </div>
                         </div>
-                        <div class="flex items-center gap-1.5">
-                            @if (config('aegis.messaging.telegram.bot_token'))
-                                <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
-                                <span class="text-xs text-emerald-400 font-medium">Configured</span>
-                            @else
+
+                        <button
+                            type="button"
+                            wire:click="toggleTelegram"
+                            @if (! $telegramConfigured) disabled @endif
+                            @class([
+                                'relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
+                                'bg-aegis-accent' => $telegramEnabled && $telegramConfigured,
+                                'bg-aegis-600' => ! $telegramEnabled || ! $telegramConfigured,
+                                'cursor-pointer' => $telegramConfigured,
+                                'cursor-not-allowed opacity-50' => ! $telegramConfigured,
+                            ])
+                        >
+                            <span
+                                @class([
+                                    'pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition duration-200 ease-in-out',
+                                    'translate-x-5' => $telegramEnabled && $telegramConfigured,
+                                    'translate-x-0' => ! $telegramEnabled || ! $telegramConfigured,
+                                ])
+                            ></span>
+                        </button>
+                    </div>
+
+                    @if ($telegramConfigured)
+                        <div class="mt-4 rounded-lg border border-aegis-border bg-aegis-900/60 px-4 py-3 space-y-2">
+                            <div class="flex items-center justify-between">
+                                <p class="text-xs text-aegis-text-dim">Status</p>
+                                <div class="flex items-center gap-1.5">
+                                    <div @class([
+                                        'w-2 h-2 rounded-full',
+                                        'bg-emerald-400' => $telegramEnabled,
+                                        'bg-aegis-600' => ! $telegramEnabled,
+                                    ])></div>
+                                    <span @class([
+                                        'text-xs font-medium',
+                                        'text-emerald-400' => $telegramEnabled,
+                                        'text-aegis-text-dim' => ! $telegramEnabled,
+                                    ])>{{ $telegramEnabled ? 'Enabled' : 'Disabled' }}</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <p class="text-xs text-aegis-text-dim">Poller Process</p>
+                                <div class="flex items-center gap-1.5">
+                                    <div @class([
+                                        'w-2 h-2 rounded-full',
+                                        'bg-emerald-400' => $telegramPollerRunning,
+                                        'bg-amber-300' => ! $telegramPollerRunning,
+                                    ])></div>
+                                    <span @class([
+                                        'text-xs font-medium',
+                                        'text-emerald-400' => $telegramPollerRunning,
+                                        'text-amber-300' => ! $telegramPollerRunning,
+                                    ])>{{ $telegramPollerRunning ? 'Running' : 'Stopped' }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    @else
+                        <div class="mt-4 rounded-lg border border-aegis-border bg-aegis-900/60 px-4 py-3">
+                            <div class="flex items-center gap-1.5">
                                 <div class="w-2 h-2 rounded-full bg-aegis-600"></div>
                                 <span class="text-xs text-aegis-text-dim">Not configured</span>
-                            @endif
+                            </div>
                         </div>
-                    </div>
+                    @endif
                 </div>
             </div>
         @endif

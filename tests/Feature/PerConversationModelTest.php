@@ -83,9 +83,27 @@ test('aegis agent withProvider and withModel set overrides', function () {
         ->and($modelProp->getValue($agent))->toBe('gpt-4o');
 });
 
-test('aegis agent forConversation resets overrides', function () {
+test('aegis agent forConversation with storage resets overrides', function () {
     $agent = app(AegisAgent::class);
     $agent->forConversation(1, withStorage: false);
+    $agent->withProvider('openai')->withModel('gpt-4o');
+
+    $agent->forConversation(2, withStorage: true);
+
+    $reflection = new ReflectionClass($agent);
+
+    $providerProp = $reflection->getProperty('overrideProvider');
+    $providerProp->setAccessible(true);
+
+    $modelProp = $reflection->getProperty('overrideModel');
+    $modelProp->setAccessible(true);
+
+    expect($providerProp->getValue($agent))->toBeNull()
+        ->and($modelProp->getValue($agent))->toBeNull();
+});
+
+test('aegis agent forConversation without storage preserves overrides', function () {
+    $agent = app(AegisAgent::class);
     $agent->withProvider('openai')->withModel('gpt-4o');
 
     $agent->forConversation(2, withStorage: false);
@@ -98,8 +116,8 @@ test('aegis agent forConversation resets overrides', function () {
     $modelProp = $reflection->getProperty('overrideModel');
     $modelProp->setAccessible(true);
 
-    expect($providerProp->getValue($agent))->toBeNull()
-        ->and($modelProp->getValue($agent))->toBeNull();
+    expect($providerProp->getValue($agent))->toBe('openai')
+        ->and($modelProp->getValue($agent))->toBe('gpt-4o');
 });
 
 test('agent status shows conversation model when set', function () {

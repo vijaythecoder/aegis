@@ -13,7 +13,7 @@ return [
         'context_window' => env('AEGIS_CONTEXT_WINDOW', 200000),
         'rate_limit_window_seconds' => env('AEGIS_RATE_LIMIT_WINDOW_SECONDS', 60),
         'rate_limit_max_requests' => env('AEGIS_RATE_LIMIT_MAX_REQUESTS', 120),
-        'max_steps' => env('AEGIS_MAX_STEPS', 10),
+        'max_steps' => env('AEGIS_MAX_STEPS', 50),
         'max_retries' => env('AEGIS_MAX_RETRIES', 3),
         'timeout' => env('AEGIS_TIMEOUT', 120),
         'project_path' => env('AEGIS_PROJECT_PATH'),

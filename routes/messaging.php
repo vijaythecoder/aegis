@@ -1,7 +1,7 @@
 <?php
 
-use App\Messaging\Adapters\TelegramAdapter;
 use App\Messaging\Adapters\SlackAdapter;
+use App\Messaging\Adapters\TelegramAdapter;
 use App\Messaging\MessageRouter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -42,7 +42,7 @@ Route::post('/webhook/{platform}', function (Request $request, string $platform)
     if ($adapter instanceof SlackAdapter) {
         app()->terminating(function () use ($router, $adapter, $incoming): void {
             $response = $router->route($incoming);
-            $adapter->sendMessage($incoming->channelId, $response);
+            $adapter->sendMessage($incoming->channelId, $response->text);
         });
 
         return response()->json(['ok' => true]);
@@ -59,7 +59,7 @@ Route::post('/webhook/{platform}', function (Request $request, string $platform)
     }
 
     $response = $router->route($incoming);
-    $adapter->sendMessage($incoming->channelId, $response);
+    $adapter->sendMessage($incoming->channelId, $response->text);
 
     return response()->json(['ok' => true]);
 });

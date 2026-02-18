@@ -15,9 +15,8 @@ it('builds system prompt with core sections', function () {
     expect($prompt)->toContain('Aegis')
         ->and($prompt)->toContain('Current datetime')
         ->and($prompt)->toContain('Available tools')
-        ->and($prompt)->toContain('Memory Recall')
-        ->and($prompt)->toContain('memory_recall')
-        ->and($prompt)->toContain('memory_store');
+        ->and($prompt)->toContain('Memory System (Automatic)')
+        ->and($prompt)->toContain('auto-recalled');
 });
 
 it('includes user profile when provided', function () {
@@ -62,13 +61,15 @@ it('includes preferences from memory', function () {
         ->and($prompt)->toContain('theme: dark mode');
 });
 
-it('includes memory recall instructions', function () {
+it('includes automatic memory system instructions', function () {
     $builder = app(SystemPromptBuilder::class);
     $prompt = $builder->build();
 
-    expect($prompt)->toContain('MANDATORY')
-        ->and($prompt)->toContain('memory_recall')
-        ->and($prompt)->toContain('memory_store');
+    expect($prompt)->toContain('Memory System (Automatic)')
+        ->and($prompt)->toContain('auto-recalled')
+        ->and($prompt)->toContain('automatically extracted')
+        ->and($prompt)->not->toContain('MANDATORY: Before answering')
+        ->and($prompt)->not->toContain('use the memory_store tool');
 });
 
 it('includes active procedures in system prompt', function () {

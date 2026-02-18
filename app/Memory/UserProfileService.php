@@ -2,11 +2,11 @@
 
 namespace App\Memory;
 
+use App\Agent\ProfileSummaryAgent;
 use App\Enums\MemoryType;
 use App\Models\Memory;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
-use Prism\Prism\Facades\Prism;
 use Throwable;
 
 class UserProfileService
@@ -77,25 +77,8 @@ class UserProfileService
 
     private function generateProfileViaLlm(string $memories): ?string
     {
-        $provider = (string) (config('aegis.agent.summary_provider') ?: config('aegis.agent.default_provider', 'anthropic'));
-        $model = (string) config('aegis.agent.summary_model');
-
-        if ($model === '') {
-            $model = (string) config("aegis.providers.{$provider}.default_model", '');
-        }
-
         try {
-            $response = Prism::text()
-                ->using($provider, $model)
-                ->withClientOptions(['timeout' => 15])
-                ->withSystemPrompt(implode("\n", [
-                    'You are a profile summarizer. Given a list of facts, preferences, and notes about a user, produce a concise user profile summary (150-300 tokens max).',
-                    'Format: short sentences or phrases. Include name, timezone, tech stack, current projects, communication style, and key preferences.',
-                    'Do NOT invent information. Only use what is provided. If a field has no data, skip it.',
-                    'Return ONLY the summary text, no headers or labels.',
-                ]))
-                ->withPrompt("User memories:\n{$memories}")
-                ->asText();
+            $response = app(ProfileSummaryAgent::class)->prompt("User memories:\n{$memories}");
 
             $profile = trim($response->text);
 

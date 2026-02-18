@@ -2,10 +2,10 @@
 
 namespace App\Memory;
 
+use App\Agent\ConversationSummaryAgent;
 use App\Models\Conversation;
 use App\Models\Message;
 use Illuminate\Support\Facades\Log;
-use Prism\Prism\Facades\Prism;
 use Throwable;
 
 class ConversationSummaryService
@@ -72,6 +72,8 @@ class ConversationSummaryService
 
     public function summarizeAll(int $staleMinutes = 60): int
     {
+        $staleMinutes = max(0, $staleMinutes);
+
         $conversations = Conversation::query()
             ->whereNull('summary')
             ->orWhere('summary', '')
@@ -81,7 +83,7 @@ class ConversationSummaryService
         $count = 0;
 
         foreach ($conversations as $conversation) {
-            if ($this->summarize($conversation->id) !== null) {
+            if ($this->summarizeIfStale($conversation->id, $staleMinutes) !== null) {
                 $count++;
             }
         }
@@ -91,25 +93,8 @@ class ConversationSummaryService
 
     private function generateSummaryViaLlm(string $transcript): ?string
     {
-        $provider = (string) (config('aegis.agent.summary_provider') ?: config('aegis.agent.default_provider', 'anthropic'));
-        $model = (string) config('aegis.agent.summary_model');
-
-        if ($model === '') {
-            $model = (string) config("aegis.providers.{$provider}.default_model", '');
-        }
-
         try {
-            $response = Prism::text()
-                ->using($provider, $model)
-                ->withClientOptions(['timeout' => 20])
-                ->withSystemPrompt(implode("\n", [
-                    'Summarize this conversation in 2-4 sentences.',
-                    'Focus on: key topics discussed, decisions made, and any action items.',
-                    'Include specific technical details, project names, or preferences mentioned.',
-                    'Return ONLY the summary text.',
-                ]))
-                ->withPrompt($transcript)
-                ->asText();
+            $response = app(ConversationSummaryAgent::class)->prompt($transcript);
 
             $summary = trim($response->text);
 

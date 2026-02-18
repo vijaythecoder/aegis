@@ -96,10 +96,10 @@ it('returns SDK tools from ToolRegistry', function () {
     }
 });
 
-it('returns empty middleware array', function () {
+it('returns middleware array with memory and token tracking', function () {
     $agent = app(AegisAgent::class);
 
-    expect($agent->middleware())->toBeArray()->toBeEmpty();
+    expect($agent->middleware())->toBeArray()->toHaveCount(2);
 });
 
 it('supports conversation memory via RemembersConversations', function () {

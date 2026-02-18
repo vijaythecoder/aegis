@@ -2,10 +2,10 @@
 
 namespace App\Memory;
 
+use App\Agent\TitleGeneratorAgent;
 use App\Models\Conversation;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Log;
-use Prism\Prism\Facades\Prism;
 use Throwable;
 
 class ConversationService
@@ -68,20 +68,8 @@ class ConversationService
             return 'New conversation';
         }
 
-        $provider = (string) (config('aegis.agent.summary_provider') ?: config('aegis.agent.default_provider', 'anthropic'));
-        $model = (string) config('aegis.agent.summary_model');
-
-        if ($model === '') {
-            $model = (string) config("aegis.providers.{$provider}.default_model", '');
-        }
-
         try {
-            $response = Prism::text()
-                ->using($provider, $model)
-                ->withClientOptions(['timeout' => 10])
-                ->withSystemPrompt('Generate a short conversation title (max 6 words) for the user message below. Return ONLY the title text, no quotes, no punctuation at the end.')
-                ->withPrompt(mb_substr($userMessage, 0, 500))
-                ->asText();
+            $response = app(TitleGeneratorAgent::class)->prompt(mb_substr($userMessage, 0, 500));
 
             $title = trim($response->text);
 
