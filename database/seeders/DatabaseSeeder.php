@@ -23,5 +23,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         $this->call(ProactiveTaskSeeder::class);
+        $this->call(SkillSeeder::class);
+        $this->call(DefaultAgentSeeder::class);
     }
 }
