@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Agent\AegisAgent;
 use App\Agent\AegisConversationStore;
+use App\Agent\AgentRegistry;
 use App\Desktop\Contracts\DesktopBridge;
 use App\Desktop\ElectronDesktopBridge;
 use App\Messaging\Adapters\DiscordAdapter;
@@ -27,6 +28,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(ConversationStore::class, AegisConversationStore::class);
         $this->app->singleton(DesktopBridge::class, ElectronDesktopBridge::class);
         $this->app->singleton(AegisAgent::class);
+        $this->app->singleton(AgentRegistry::class);
         $this->app->singleton(SessionBridge::class);
         $this->app->singleton(ToolRegistry::class);
         $this->app->bind(PluginManager::class, function ($app, array $parameters): PluginManager {

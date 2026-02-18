@@ -3,18 +3,21 @@
 namespace App\Agent;
 
 use App\Enums\MemoryType;
+use App\Models\Agent as AgentModel;
 use App\Models\Conversation;
 use App\Models\Memory;
 use App\Models\Procedure;
+use App\Models\Skill;
 use App\Tools\ToolRegistry;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
 class SystemPromptBuilder
 {
     public function __construct(private readonly ToolRegistry $toolRegistry) {}
 
-    public function build(?Conversation $conversation = null, ?string $userProfile = null): string
+    public function build(?Conversation $conversation = null, ?string $userProfile = null, ?AgentModel $agentModel = null): string
     {
         $appName = (string) config('aegis.name', 'Aegis');
         $tagline = (string) config('aegis.tagline', 'AI under your Aegis');
@@ -24,6 +27,7 @@ class SystemPromptBuilder
             "You are {$appName}, {$tagline}.",
             'Be concise, safe, and accurate. Use tools when they improve the answer.',
             "Current datetime: {$timestamp}",
+            $this->renderSkillsSection($agentModel),
             $this->renderToolsSection(),
             $this->renderUserProfileSection($userProfile),
             $this->renderPreferencesSection($conversation),
@@ -35,6 +39,38 @@ class SystemPromptBuilder
         ];
 
         return implode("\n\n", array_filter($sections));
+    }
+
+    private function renderSkillsSection(?AgentModel $agentModel): string
+    {
+        if ($agentModel === null) {
+            return '';
+        }
+
+        $skills = $agentModel->skills()
+            ->where('is_active', true)
+            ->get()
+            ->filter(fn (Skill $skill): bool => trim($skill->instructions) !== '');
+
+        if ($skills->isEmpty()) {
+            return '';
+        }
+
+        $entries = $skills->map(function (Skill $skill): string {
+            $instructions = $skill->instructions;
+            // Warn if skill instructions exceed ~3000 tokens (~12000 chars)
+            if (mb_strlen($instructions) > 12000) {
+                Log::warning('aegis.skill.oversized', [
+                    'skill' => $skill->slug,
+                    'chars' => mb_strlen($instructions),
+                ]);
+                $instructions = mb_substr($instructions, 0, 12000)."\n\n[Truncated — skill content exceeds recommended length]";
+            }
+
+            return "### {$skill->name}\n{$instructions}";
+        });
+
+        return "## Specialized Knowledge\n\n".$entries->implode("\n\n");
     }
 
     private function renderToolsSection(): string
