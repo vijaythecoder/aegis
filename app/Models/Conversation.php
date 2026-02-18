@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Conversation extends Model
@@ -11,6 +12,7 @@ class Conversation extends Model
     use HasFactory;
 
     protected $fillable = [
+        'agent_id',
         'title',
         'summary',
         'model',
@@ -40,5 +42,10 @@ class Conversation extends Model
     public function auditLogs(): HasMany
     {
         return $this->hasMany(AuditLog::class);
+    }
+
+    public function agent(): BelongsTo
+    {
+        return $this->belongsTo(Agent::class);
     }
 }
