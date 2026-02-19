@@ -7,6 +7,7 @@ use App\Models\Agent as AgentModel;
 use App\Models\Conversation;
 use App\Models\Memory;
 use App\Models\Procedure;
+use App\Models\Project;
 use App\Models\Skill;
 use App\Tools\ToolRegistry;
 use Illuminate\Support\Collection;
@@ -28,6 +29,8 @@ class SystemPromptBuilder
             'Be concise, safe, and accurate. Use tools when they improve the answer.',
             "Current datetime: {$timestamp}",
             $this->renderSkillsSection($agentModel),
+            $this->renderAgentsSection(),
+            $this->renderProjectsSection(),
             $this->renderToolsSection(),
             $this->renderUserProfileSection($userProfile),
             $this->renderPreferencesSection($conversation),
@@ -71,6 +74,69 @@ class SystemPromptBuilder
         });
 
         return "## Specialized Knowledge\n\n".$entries->implode("\n\n");
+    }
+
+    private function renderAgentsSection(): string
+    {
+        if (! Schema::hasTable('agents')) {
+            return '';
+        }
+
+        $agents = AgentModel::query()
+            ->where('is_active', true)
+            ->where('slug', '!=', 'aegis')
+            ->limit(10)
+            ->get();
+
+        if ($agents->isEmpty()) {
+            return '';
+        }
+
+        $lines = $agents->map(function (AgentModel $agent): string {
+            $skills = $agent->skills()->where('is_active', true)->pluck('name')->implode(', ');
+            $skillInfo = $skills !== '' ? " (skills: {$skills})" : '';
+
+            return "- {$agent->name} ({$agent->slug}): {$agent->persona}{$skillInfo}";
+        });
+
+        return "## Available Agents\n"
+            ."These are specialized AI agents the user has created. You can suggest using them for relevant tasks.\n"
+            ."Use manage_tasks to assign tasks to agents by their slug.\n"
+            .$lines->implode("\n");
+    }
+
+    private function renderProjectsSection(): string
+    {
+        if (! Schema::hasTable('projects')) {
+            return '';
+        }
+
+        $projects = Project::query()
+            ->whereIn('status', ['active', 'paused'])
+            ->withCount([
+                'tasks as pending_tasks_count' => function ($q): void {
+                    $q->where('status', 'pending');
+                },
+            ])
+            ->orderByDesc('updated_at')
+            ->limit(10)
+            ->get();
+
+        if ($projects->isEmpty()) {
+            return '';
+        }
+
+        $lines = $projects->map(function (Project $project): string {
+            $status = $project->status !== 'active' ? " [{$project->status}]" : '';
+            $pending = $project->pending_tasks_count > 0 ? " — {$project->pending_tasks_count} pending tasks" : '';
+            $deadline = $project->deadline ? ' (due: '.$project->deadline->format('M j, Y').')' : '';
+
+            return "- {$project->title}{$status}{$pending}{$deadline}";
+        });
+
+        return "## Active Projects\n"
+            ."The user has these active projects. Use manage_projects and manage_tasks tools to help manage them.\n"
+            .$lines->implode("\n");
     }
 
     private function renderToolsSection(): string

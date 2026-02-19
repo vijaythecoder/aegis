@@ -30,37 +30,39 @@
     <div class="flex-1 overflow-y-auto px-3 space-y-2">
 
         {{-- Agents Section --}}
-        @if ($agents->isNotEmpty())
-            <div x-data="{ open: $wire.entangle('agentsOpen') }">
-                <button @click="open = !open" class="no-drag w-full flex items-center gap-1.5 pb-1 cursor-pointer group">
-                    <svg class="w-3 h-3 text-aegis-text-dim/60 transition-transform duration-150" :class="{ '-rotate-90': !open }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="6 9 12 15 18 9"/>
-                    </svg>
-                    <span class="text-[10px] font-medium uppercase tracking-wider text-aegis-text-dim/60 group-hover:text-aegis-text-dim transition-colors">Agents</span>
-                </button>
-                <div x-show="open" x-transition:enter="transition-all duration-150 ease-out" x-transition:enter-start="opacity-0 -translate-y-1" x-transition:enter-end="opacity-100 translate-y-0" class="space-y-px">
-                    @foreach ($agents as $agent)
-                        <div
-                            wire:click="openAgentConversation({{ $agent->id }})"
-                            class="no-drag w-full text-left px-2.5 py-1.5 rounded-lg text-[13px] transition-all duration-150 flex items-center gap-2 cursor-pointer text-aegis-text-dim hover:text-aegis-text hover:bg-aegis-surface-hover"
-                        >
-                            <span class="text-base leading-none shrink-0">{{ $agent->avatar ?? '🤖' }}</span>
-                            <span class="truncate flex-1">{{ $agent->name }}</span>
-                        </div>
-                    @endforeach
-                    <a
-                        href="{{ route('settings', ['tab' => 'agents']) }}"
-                        class="no-drag flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12px] text-aegis-accent/60 hover:text-aegis-accent hover:bg-aegis-accent/5 transition-all duration-150"
+        <div x-data="{ open: $wire.entangle('agentsOpen') }">
+            <button @click="open = !open" class="no-drag w-full flex items-center gap-1.5 pb-1 cursor-pointer group">
+                <svg class="w-3 h-3 text-aegis-text-dim/60 transition-transform duration-150" :class="{ '-rotate-90': !open }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 12 15 18 9"/>
+                </svg>
+                <span class="text-[10px] font-medium uppercase tracking-wider text-aegis-text-dim/60 group-hover:text-aegis-text-dim transition-colors">Agents</span>
+            </button>
+            <div x-show="open" x-transition:enter="transition-all duration-150 ease-out" x-transition:enter-start="opacity-0 -translate-y-1" x-transition:enter-end="opacity-100 translate-y-0" class="space-y-px">
+                @forelse ($agents as $agent)
+                    <div
+                        wire:click="openAgentConversation({{ $agent->id }})"
+                        class="no-drag w-full text-left px-2.5 py-1.5 rounded-lg text-[13px] transition-all duration-150 flex items-center gap-2 cursor-pointer text-aegis-text-dim hover:text-aegis-text hover:bg-aegis-surface-hover"
                     >
-                        <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                            <line x1="12" y1="5" x2="12" y2="19"/>
-                            <line x1="5" y1="12" x2="19" y2="12"/>
-                        </svg>
-                        New Agent
-                    </a>
-                </div>
+                        <span class="text-base leading-none shrink-0">{{ $agent->avatar ?? '🤖' }}</span>
+                        <span class="truncate flex-1">{{ $agent->name }}</span>
+                    </div>
+                @empty
+                    <div class="px-2.5 py-2 text-center">
+                        <p class="text-[11px] text-aegis-text-dim/50">No agents yet</p>
+                    </div>
+                @endforelse
+                <a
+                    href="{{ route('settings', ['tab' => 'agents']) }}"
+                    class="no-drag flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12px] text-aegis-accent/60 hover:text-aegis-accent hover:bg-aegis-accent/5 transition-all duration-150"
+                >
+                    <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19"/>
+                        <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    New Agent
+                </a>
             </div>
-        @endif
+        </div>
 
         {{-- Conversations Section --}}
         <div x-data="{ open: $wire.entangle('conversationsOpen') }">
@@ -101,24 +103,29 @@
         </div>
 
         {{-- Projects Section --}}
-        @if ($projects->isNotEmpty())
-            <div x-data="{ open: $wire.entangle('projectsOpen') }">
-                <button @click="open = !open" class="no-drag w-full flex items-center gap-1.5 pb-1 cursor-pointer group">
-                    <svg class="w-3 h-3 text-aegis-text-dim/60 transition-transform duration-150" :class="{ '-rotate-90': !open }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="6 9 12 15 18 9"/>
-                    </svg>
-                    <span class="text-[10px] font-medium uppercase tracking-wider text-aegis-text-dim/60 group-hover:text-aegis-text-dim transition-colors">Projects</span>
-                </button>
-                <div x-show="open" x-transition:enter="transition-all duration-150 ease-out" x-transition:enter-start="opacity-0 -translate-y-1" x-transition:enter-end="opacity-100 translate-y-0" class="space-y-px">
-                    @foreach ($projects as $project)
-                        <div class="no-drag w-full text-left px-2.5 py-1.5 rounded-lg text-[13px] transition-all duration-150 flex items-center justify-between gap-2 text-aegis-text-dim">
-                            <span class="truncate flex-1">{{ $project->title }}</span>
-                            <span class="text-[10px] text-aegis-text-dim/50 shrink-0">{{ $project->completed_tasks_count }}/{{ $project->tasks_count }}</span>
-                        </div>
-                    @endforeach
-                </div>
+        <div x-data="{ open: $wire.entangle('projectsOpen') }">
+            <button @click="open = !open" class="no-drag w-full flex items-center gap-1.5 pb-1 cursor-pointer group">
+                <svg class="w-3 h-3 text-aegis-text-dim/60 transition-transform duration-150" :class="{ '-rotate-90': !open }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 12 15 18 9"/>
+                </svg>
+                <span class="text-[10px] font-medium uppercase tracking-wider text-aegis-text-dim/60 group-hover:text-aegis-text-dim transition-colors">Projects</span>
+            </button>
+            <div x-show="open" x-transition:enter="transition-all duration-150 ease-out" x-transition:enter-start="opacity-0 -translate-y-1" x-transition:enter-end="opacity-100 translate-y-0" class="space-y-px">
+                @forelse ($projects as $project)
+                    <a
+                        href="{{ route('project.dashboard', $project->id) }}"
+                        class="no-drag w-full text-left px-2.5 py-1.5 rounded-lg text-[13px] transition-all duration-150 flex items-center justify-between gap-2 cursor-pointer text-aegis-text-dim hover:text-aegis-text hover:bg-aegis-surface-hover"
+                    >
+                        <span class="truncate flex-1">{{ $project->title }}</span>
+                        <span class="text-[10px] text-aegis-text-dim/50 shrink-0">{{ $project->completed_tasks_count }}/{{ $project->tasks_count }}</span>
+                    </a>
+                @empty
+                    <div class="px-2.5 py-2 text-center">
+                        <p class="text-[11px] text-aegis-text-dim/50">No projects yet</p>
+                    </div>
+                @endforelse
             </div>
-        @endif
+        </div>
 
     </div>
 </div>

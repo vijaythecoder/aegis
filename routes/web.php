@@ -48,4 +48,6 @@ Route::get('/knowledge', fn () => view('knowledge'))->name('knowledge');
 
 Route::get('/security', fn () => view('security'))->name('security');
 
+Route::get('/projects/{project}', fn (int $project) => view('project-dashboard', ['projectId' => $project]))->name('project.dashboard');
+
 Route::get('/mobile/chat', fn () => view('mobile.chat'))->name('mobile.chat');

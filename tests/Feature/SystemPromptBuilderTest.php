@@ -163,3 +163,111 @@ it('returns no skills section when agent has no skills', function () {
     $prompt = $builder->build(agentModel: $agent);
     expect($prompt)->not->toContain('Specialized Knowledge');
 });
+
+it('includes agents section when user-created agents exist', function () {
+    \App\Models\Agent::factory()->create(['name' => 'FitCoach', 'slug' => 'fitcoach', 'persona' => 'Fitness expert', 'is_active' => true]);
+    \App\Models\Agent::factory()->create(['name' => 'TaxHelper', 'slug' => 'taxhelper', 'persona' => 'Tax advisor', 'is_active' => true]);
+
+    $builder = app(SystemPromptBuilder::class);
+    $prompt = $builder->build();
+
+    expect($prompt)->toContain('Available Agents')
+        ->and($prompt)->toContain('FitCoach (fitcoach)')
+        ->and($prompt)->toContain('TaxHelper (taxhelper)')
+        ->and($prompt)->toContain('manage_tasks');
+});
+
+it('excludes default aegis agent from agents section', function () {
+    \App\Models\Agent::factory()->create(['name' => 'Aegis', 'slug' => 'aegis', 'is_active' => true]);
+    \App\Models\Agent::factory()->create(['name' => 'FitCoach', 'slug' => 'fitcoach', 'persona' => 'Fitness expert', 'is_active' => true]);
+
+    $builder = app(SystemPromptBuilder::class);
+    $prompt = $builder->build();
+
+    expect($prompt)->toContain('FitCoach')
+        ->and($prompt)->not->toContain('Aegis (aegis)');
+});
+
+it('excludes inactive agents from agents section', function () {
+    \App\Models\Agent::factory()->create(['name' => 'InactiveBot', 'slug' => 'inactivebot', 'is_active' => false]);
+
+    $builder = app(SystemPromptBuilder::class);
+    $prompt = $builder->build();
+
+    expect($prompt)->not->toContain('Available Agents')
+        ->and($prompt)->not->toContain('InactiveBot');
+});
+
+it('includes agent skills in agents section', function () {
+    $agent = \App\Models\Agent::factory()->create(['name' => 'FitCoach', 'slug' => 'fitcoach', 'persona' => 'Fitness expert', 'is_active' => true]);
+    $skill = \App\Models\Skill::factory()->create(['name' => 'Nutrition Guide', 'is_active' => true]);
+    $agent->skills()->attach($skill->id);
+
+    $builder = app(SystemPromptBuilder::class);
+    $prompt = $builder->build();
+
+    expect($prompt)->toContain('FitCoach (fitcoach)')
+        ->and($prompt)->toContain('skills: Nutrition Guide');
+});
+
+it('omits agents section when no user agents exist', function () {
+    $builder = app(SystemPromptBuilder::class);
+    $prompt = $builder->build();
+
+    expect($prompt)->not->toContain('Available Agents');
+});
+
+it('includes projects section when active projects exist', function () {
+    \App\Models\Project::factory()->create(['title' => 'Tax Preparation', 'status' => 'active']);
+    \App\Models\Project::factory()->create(['title' => 'Home Renovation', 'status' => 'active', 'deadline' => '2026-06-15']);
+
+    $builder = app(SystemPromptBuilder::class);
+    $prompt = $builder->build();
+
+    expect($prompt)->toContain('Active Projects')
+        ->and($prompt)->toContain('Tax Preparation')
+        ->and($prompt)->toContain('Home Renovation')
+        ->and($prompt)->toContain('Jun 15, 2026')
+        ->and($prompt)->toContain('manage_projects');
+});
+
+it('shows pending task counts in projects section', function () {
+    $project = \App\Models\Project::factory()->create(['title' => 'My Project', 'status' => 'active']);
+    \App\Models\Task::factory()->count(3)->create(['project_id' => $project->id, 'status' => 'pending']);
+    \App\Models\Task::factory()->count(1)->create(['project_id' => $project->id, 'status' => 'completed', 'completed_at' => now()]);
+
+    $builder = app(SystemPromptBuilder::class);
+    $prompt = $builder->build();
+
+    expect($prompt)->toContain('3 pending tasks');
+});
+
+it('includes paused projects in projects section', function () {
+    \App\Models\Project::factory()->create(['title' => 'Paused One', 'status' => 'paused']);
+
+    $builder = app(SystemPromptBuilder::class);
+    $prompt = $builder->build();
+
+    expect($prompt)->toContain('Active Projects')
+        ->and($prompt)->toContain('Paused One')
+        ->and($prompt)->toContain('[paused]');
+});
+
+it('excludes completed and archived projects from projects section', function () {
+    \App\Models\Project::factory()->create(['title' => 'Done Project', 'status' => 'completed']);
+    \App\Models\Project::factory()->create(['title' => 'Old Project', 'status' => 'archived']);
+
+    $builder = app(SystemPromptBuilder::class);
+    $prompt = $builder->build();
+
+    expect($prompt)->not->toContain('Active Projects')
+        ->and($prompt)->not->toContain('Done Project')
+        ->and($prompt)->not->toContain('Old Project');
+});
+
+it('omits projects section when no active projects exist', function () {
+    $builder = app(SystemPromptBuilder::class);
+    $prompt = $builder->build();
+
+    expect($prompt)->not->toContain('Active Projects');
+});
