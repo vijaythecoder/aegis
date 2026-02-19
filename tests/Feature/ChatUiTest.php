@@ -257,3 +257,112 @@ it('shows token count for conversation', function () {
     Livewire::test(AgentStatus::class, ['conversationId' => $conversation->id])
         ->assertSee('tokens');
 });
+
+// ── Sidebar Agent Section ─────────────────────────────────────────────────────
+
+it('shows agents section in sidebar when agents exist', function () {
+    \App\Models\Agent::factory()->create(['name' => 'FitCoach', 'slug' => 'fitcoach', 'avatar' => '💪']);
+
+    Livewire::test(ConversationSidebar::class)
+        ->assertSee('Agents')
+        ->assertSee('FitCoach');
+});
+
+it('creates agent conversation when clicking agent in sidebar', function () {
+    $agent = \App\Models\Agent::factory()->create();
+
+    Livewire::test(ConversationSidebar::class)
+        ->call('openAgentConversation', $agent->id)
+        ->assertRedirect();
+
+    expect(Conversation::where('agent_id', $agent->id)->count())->toBe(1);
+});
+
+it('reuses existing agent conversation', function () {
+    $agent = \App\Models\Agent::factory()->create();
+    Conversation::factory()->create(['agent_id' => $agent->id]);
+
+    Livewire::test(ConversationSidebar::class)
+        ->call('openAgentConversation', $agent->id)
+        ->assertRedirect();
+
+    expect(Conversation::where('agent_id', $agent->id)->count())->toBe(1);
+});
+
+it('shows conversations section filtered to non-agent conversations', function () {
+    Conversation::factory()->create(['title' => 'Regular Chat', 'agent_id' => null]);
+    $agent = \App\Models\Agent::factory()->create();
+    Conversation::factory()->create(['title' => 'Agent Chat', 'agent_id' => $agent->id]);
+
+    Livewire::test(ConversationSidebar::class)
+        ->assertSee('Regular Chat')
+        ->assertDontSee('Agent Chat');
+});
+
+it('shows projects section with active projects', function () {
+    \App\Models\Project::factory()->create(['title' => 'Tax Prep', 'status' => 'active']);
+
+    Livewire::test(ConversationSidebar::class)
+        ->assertSee('Projects')
+        ->assertSee('Tax Prep');
+});
+
+// ── Agent-Aware Chat ─────────────────────────────────────────────────────────
+
+it('shows default placeholder for regular conversations', function () {
+    $conversation = Conversation::factory()->create(['agent_id' => null]);
+
+    Livewire::test(Chat::class, ['conversationId' => $conversation->id])
+        ->assertSee('Message Aegis...');
+});
+
+it('shows agent name in placeholder for agent conversations', function () {
+    $agent = \App\Models\Agent::factory()->create(['name' => 'FitCoach', 'avatar' => '💪']);
+    $conversation = Conversation::factory()->create(['agent_id' => $agent->id]);
+
+    Livewire::test(Chat::class, ['conversationId' => $conversation->id])
+        ->assertSee('Message FitCoach...');
+});
+
+it('shows agent badge header for agent conversations', function () {
+    $agent = \App\Models\Agent::factory()->create(['name' => 'TaxHelper', 'avatar' => '📊']);
+    $conversation = Conversation::factory()->create(['agent_id' => $agent->id]);
+
+    Livewire::test(Chat::class, ['conversationId' => $conversation->id])
+        ->assertSee('TaxHelper')
+        ->assertSee('📊');
+});
+
+it('does not show agent badge for regular conversations', function () {
+    $conversation = Conversation::factory()->create(['agent_id' => null, 'title' => 'Normal Chat']);
+
+    $component = Livewire::test(Chat::class, ['conversationId' => $conversation->id]);
+
+    // Should show default placeholder, not an agent badge
+    $component->assertSee('Message Aegis...');
+});
+
+it('uses DynamicAgent for agent conversations in generateResponse', function () {
+    $agent = \App\Models\Agent::factory()->create(['name' => 'TestAgent', 'persona' => 'You are a test agent.']);
+    $conversation = Conversation::factory()->create(['agent_id' => $agent->id]);
+
+    \App\Agent\DynamicAgent::fake(['Dynamic response']);
+
+    Livewire::test(Chat::class, ['conversationId' => $conversation->id])
+        ->set('pendingMessage', 'Test question')
+        ->call('generateResponse')
+        ->assertSet('isThinking', false)
+        ->assertDispatched('message-sent');
+});
+
+it('uses AegisAgent for regular conversations in generateResponse', function () {
+    $conversation = Conversation::factory()->create(['agent_id' => null]);
+
+    AegisAgent::fake(['Regular response']);
+
+    Livewire::test(Chat::class, ['conversationId' => $conversation->id])
+        ->set('pendingMessage', 'Test question')
+        ->call('generateResponse')
+        ->assertSet('isThinking', false)
+        ->assertDispatched('message-sent');
+});

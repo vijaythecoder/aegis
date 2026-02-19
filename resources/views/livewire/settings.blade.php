@@ -37,7 +37,7 @@
     {{-- Tab Navigation --}}
     <div x-data="{ tab: $wire.entangle('activeTab') }" class="space-y-6">
         <nav class="flex gap-1 p-1 rounded-xl bg-aegis-850 border border-aegis-border">
-            @foreach (['providers' => 'Providers', 'memory' => 'Memory', 'automation' => 'Automation', 'messaging' => 'Messaging', 'marketplace' => 'Marketplace', 'security' => 'Security', 'general' => 'General'] as $key => $label)
+            @foreach (['providers' => 'Providers', 'memory' => 'Memory', 'automation' => 'Automation', 'messaging' => 'Messaging', 'marketplace' => 'Marketplace', 'agents' => 'Agents', 'skills' => 'Skills', 'security' => 'Security', 'general' => 'General'] as $key => $label)
                 <button
                     type="button"
                     wire:click="setTab('{{ $key }}')"
@@ -1086,6 +1086,16 @@
                     @endif
                 </div>
             </div>
+        @endif
+
+        {{-- ═══ Agents Tab ═══ --}}
+        @if ($activeTab === 'agents')
+            <livewire:agent-settings />
+        @endif
+
+        {{-- ═══ Skills Tab ═══ --}}
+        @if ($activeTab === 'skills')
+            <livewire:skill-settings />
         @endif
 
         {{-- ═══ General Tab ═══ --}}

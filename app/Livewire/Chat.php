@@ -4,6 +4,8 @@ namespace App\Livewire;
 
 use App\Agent\AegisAgent;
 use App\Agent\AgentLoop;
+use App\Agent\AgentRegistry;
+use App\Agent\DynamicAgent;
 use App\Agent\ModelCapabilities;
 use App\Agent\ProviderManager;
 use App\Enums\MessageRole;
@@ -87,14 +89,20 @@ class Chat extends Component
         $this->pendingMessage = '';
 
         try {
-            $agent = app(AegisAgent::class);
+            $conversation = Conversation::query()->find($this->conversationId);
+            $agent = $conversation !== null
+                ? app(AgentRegistry::class)->forConversation($conversation)
+                : app(AegisAgent::class);
+
             $agent->forConversation($this->conversationId);
 
-            if ($this->selectedProvider !== '') {
-                $agent->withProvider($this->selectedProvider);
-            }
-            if ($this->selectedModel !== '') {
-                $agent->withModel($this->selectedModel);
+            if ($agent instanceof AegisAgent) {
+                if ($this->selectedProvider !== '') {
+                    $agent->withProvider($this->selectedProvider);
+                }
+                if ($this->selectedModel !== '') {
+                    $agent->withModel($this->selectedModel);
+                }
             }
 
             $loop = app(AgentLoop::class);
@@ -106,7 +114,7 @@ class Chat extends Component
             if ($loop->requiresPlanning($text)) {
                 $this->generatePlannedResponse($loop, $text);
             } else {
-                $this->generateStreamedResponse($text);
+                $this->generateStreamedResponse($agent, $text);
             }
 
             $this->generateTitleIfNeeded($text);
@@ -117,9 +125,8 @@ class Chat extends Component
         }
     }
 
-    private function generateStreamedResponse(string $text): void
+    private function generateStreamedResponse(AegisAgent|DynamicAgent $agent, string $text): void
     {
-        $agent = app(AegisAgent::class);
         $stream = $agent->stream($text);
 
         $assistantResponse = '';
@@ -178,15 +185,26 @@ class Chat extends Component
     public function render()
     {
         $messages = collect();
+        $agentName = null;
+        $agentAvatar = null;
 
         if ($this->conversationId !== null) {
             $messages = app(MessageService::class)->loadHistory($this->conversationId, 50);
+
+            $conversation = Conversation::query()->with('agent')->find($this->conversationId);
+
+            if ($conversation instanceof Conversation && $conversation->agent !== null) {
+                $agentName = $conversation->agent->name;
+                $agentAvatar = $conversation->agent->avatar;
+            }
         }
 
         return view('livewire.chat', [
             'messages' => $messages,
             'availableProviders' => $this->getAvailableProviders(),
             'availableModels' => $this->getAvailableModels(),
+            'agentName' => $agentName,
+            'agentAvatar' => $agentAvatar,
         ]);
     }
 

@@ -42,18 +42,42 @@
         <div class="flex-1 flex items-center justify-center p-8">
             <div class="max-w-md text-center space-y-6">
                 <div class="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-aegis-accent/20 to-aegis-accent-dim/10 border border-aegis-accent/20 flex items-center justify-center">
-                    <svg class="w-8 h-8 text-aegis-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-                    </svg>
+                    @if ($agentAvatar)
+                        <span class="text-3xl">{{ $agentAvatar }}</span>
+                    @else
+                        <svg class="w-8 h-8 text-aegis-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                        </svg>
+                    @endif
                 </div>
                 <div>
-                    <h2 class="font-display font-bold text-xl tracking-tight text-aegis-text">Start a conversation</h2>
-                    <p class="mt-2 text-sm text-aegis-text-dim leading-relaxed">Ask anything. Aegis can read files, run commands, and help you build.</p>
+                    <h2 class="font-display font-bold text-xl tracking-tight text-aegis-text">
+                        @if ($agentName)
+                            Chat with {{ $agentName }}
+                        @else
+                            Start a conversation
+                        @endif
+                    </h2>
+                    <p class="mt-2 text-sm text-aegis-text-dim leading-relaxed">
+                        @if ($agentName)
+                            {{ $agentName }} is ready to help you.
+                        @else
+                            Ask anything. Aegis can read files, run commands, and help you build.
+                        @endif
+                    </p>
                 </div>
             </div>
         </div>
     @else
         <div id="chat-messages" class="flex-1 overflow-y-auto" x-ref="messages">
+            @if ($agentName)
+                <div class="max-w-3xl mx-auto px-4 pt-4 pb-0">
+                    <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-aegis-accent/5 border border-aegis-accent/10">
+                        <span class="text-lg leading-none">{{ $agentAvatar ?? '🤖' }}</span>
+                        <span class="text-sm font-medium text-aegis-accent">{{ $agentName }}</span>
+                    </div>
+                </div>
+            @endif
             <div class="max-w-3xl mx-auto px-4 py-6 space-y-6">
                 @foreach ($messages as $msg)
                     @if ($msg->role === \App\Enums\MessageRole::User)
@@ -187,7 +211,7 @@
                         x-ref="messageInput"
                         wire:model="message"
                         x-on:keydown.enter.prevent="if (!$event.shiftKey && !$wire.isThinking) { $wire.sendMessage(); $nextTick(() => { $el.style.height = 'auto'; }) }"
-                        placeholder="Message Aegis..."
+                        placeholder="Message {{ $agentName ?? 'Aegis' }}..."
                         rows="1"
                         class="flex-1 resize-none bg-transparent text-sm text-aegis-text placeholder-aegis-text-dim focus:outline-none px-2 py-1.5 max-h-40 overflow-y-auto"
                         x-data="{ resize() { $el.style.height = 'auto'; $el.style.height = Math.min($el.scrollHeight, 160) + 'px'; } }"

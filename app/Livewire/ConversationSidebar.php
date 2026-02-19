@@ -3,7 +3,9 @@
 namespace App\Livewire;
 
 use App\Memory\ConversationService;
+use App\Models\Agent as AgentModel;
 use App\Models\Conversation;
+use App\Models\Project;
 use Livewire\Attributes\On;
 use Livewire\Component;
 
@@ -12,6 +14,12 @@ class ConversationSidebar extends Component
     public ?int $activeConversationId = null;
 
     public string $search = '';
+
+    public bool $agentsOpen = true;
+
+    public bool $conversationsOpen = true;
+
+    public bool $projectsOpen = true;
 
     public function selectConversation(int $conversationId): void
     {
@@ -30,6 +38,32 @@ class ConversationSidebar extends Component
     {
         $service = app(ConversationService::class);
         $conversation = $service->create('');
+
+        $this->activeConversationId = $conversation->id;
+
+        if (! request()->routeIs('chat', 'chat.conversation')) {
+            $this->redirect(route('chat.conversation', $conversation->id), navigate: true);
+
+            return;
+        }
+
+        $this->dispatch('conversation-selected', conversationId: $conversation->id);
+    }
+
+    public function openAgentConversation(int $agentId): void
+    {
+        AgentModel::query()->where('is_active', true)->findOrFail($agentId);
+
+        $conversation = Conversation::query()
+            ->where('agent_id', $agentId)
+            ->orderByDesc('last_message_at')
+            ->first();
+
+        if (! $conversation) {
+            $service = app(ConversationService::class);
+            $conversation = $service->create('');
+            $conversation->update(['agent_id' => $agentId]);
+        }
 
         $this->activeConversationId = $conversation->id;
 
@@ -68,6 +102,7 @@ class ConversationSidebar extends Component
     public function render()
     {
         $query = Conversation::query()
+            ->whereNull('agent_id')
             ->orderByDesc('last_message_at')
             ->orderByDesc('id');
 
@@ -77,6 +112,19 @@ class ConversationSidebar extends Component
 
         return view('livewire.conversation-sidebar', [
             'conversations' => $query->limit(50)->get(),
+            'agents' => AgentModel::query()
+                ->where('is_active', true)
+                ->where('slug', '!=', 'aegis')
+                ->orderBy('name')
+                ->get(),
+            'projects' => Project::query()
+                ->where('status', 'active')
+                ->withCount(['tasks', 'tasks as completed_tasks_count' => function ($q) {
+                    $q->where('status', 'completed');
+                }])
+                ->orderByDesc('updated_at')
+                ->limit(20)
+                ->get(),
         ]);
     }
 }
