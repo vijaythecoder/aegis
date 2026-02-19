@@ -75,7 +75,38 @@
                     <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-aegis-accent/5 border border-aegis-accent/10">
                         <span class="text-lg leading-none">{{ $agentAvatar ?? '🤖' }}</span>
                         <span class="text-sm font-medium text-aegis-accent">{{ $agentName }}</span>
+                        @if ($pendingTasks->isNotEmpty())
+                            <span class="ml-auto px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/15 text-amber-400">{{ $pendingTasks->count() }} {{ Str::plural('task', $pendingTasks->count()) }}</span>
+                        @endif
                     </div>
+                    @if ($pendingTasks->isNotEmpty())
+                        <div x-data="{ showTasks: false }" class="mt-1">
+                            <button @click="showTasks = !showTasks" class="text-[11px] text-aegis-text-dim hover:text-aegis-text transition-colors">
+                                <span x-text="showTasks ? 'Hide tasks' : 'Show tasks'"></span>
+                            </button>
+                            <div x-show="showTasks" x-transition class="mt-1 space-y-1">
+                                @foreach ($pendingTasks as $task)
+                                    <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-aegis-850 border border-aegis-border text-xs">
+                                        <span @class([
+                                            'w-1.5 h-1.5 rounded-full shrink-0',
+                                            'bg-amber-400' => $task->status === 'pending',
+                                            'bg-blue-400' => $task->status === 'in_progress',
+                                        ])></span>
+                                        <span class="flex-1 truncate text-aegis-text-dim">{{ $task->title }}</span>
+                                        @if ($task->priority === 'high')
+                                            <span class="text-[9px] font-medium uppercase text-red-400">high</span>
+                                        @endif
+                                        <button
+                                            wire:click="completeTaskFromChat({{ $task->id }})"
+                                            class="shrink-0 text-[10px] text-emerald-400 hover:text-emerald-300 transition-colors"
+                                        >
+                                            Complete
+                                        </button>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+                    @endif
                 </div>
             @endif
             <div class="max-w-3xl mx-auto px-4 py-6 space-y-6">

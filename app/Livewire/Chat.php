@@ -13,6 +13,7 @@ use App\Jobs\ExtractMemoriesJob;
 use App\Memory\ConversationService;
 use App\Memory\MessageService;
 use App\Models\Conversation;
+use App\Models\Task;
 use App\Security\ApiKeyManager;
 use Illuminate\Support\Str;
 use Laravel\Ai\Streaming\Events\TextDelta;
@@ -182,11 +183,49 @@ class Chat extends Component
         $this->loadModelSelection();
     }
 
+    public function completeTaskFromChat(int $taskId): void
+    {
+        if ($this->conversationId === null) {
+            return;
+        }
+
+        $conversation = Conversation::query()->find($this->conversationId);
+
+        if (! $conversation instanceof Conversation || $conversation->agent_id === null) {
+            return;
+        }
+
+        $task = Task::query()
+            ->where('assigned_type', 'agent')
+            ->where('assigned_id', $conversation->agent_id)
+            ->where('status', '!=', 'completed')
+            ->find($taskId);
+
+        if (! $task instanceof Task) {
+            return;
+        }
+
+        $recentMessages = app(MessageService::class)->loadHistory($this->conversationId, 5);
+        $output = $recentMessages
+            ->where('role', MessageRole::Assistant)
+            ->pluck('content')
+            ->implode("\n\n");
+
+        $task->update([
+            'status' => 'completed',
+            'output' => $output ?: 'Completed via conversation.',
+            'completed_at' => now(),
+        ]);
+
+        $this->dispatch('task-completed', taskId: $taskId);
+    }
+
     public function render()
     {
         $messages = collect();
         $agentName = null;
         $agentAvatar = null;
+        $pendingTasks = collect();
 
         if ($this->conversationId !== null) {
             $messages = app(MessageService::class)->loadHistory($this->conversationId, 50);
@@ -196,6 +235,13 @@ class Chat extends Component
             if ($conversation instanceof Conversation && $conversation->agent !== null) {
                 $agentName = $conversation->agent->name;
                 $agentAvatar = $conversation->agent->avatar;
+
+                $pendingTasks = Task::query()
+                    ->where('assigned_type', 'agent')
+                    ->where('assigned_id', $conversation->agent_id)
+                    ->whereIn('status', ['pending', 'in_progress'])
+                    ->limit(10)
+                    ->get();
             }
         }
 
@@ -205,6 +251,7 @@ class Chat extends Component
             'availableModels' => $this->getAvailableModels(),
             'agentName' => $agentName,
             'agentAvatar' => $agentAvatar,
+            'pendingTasks' => $pendingTasks,
         ]);
     }
 

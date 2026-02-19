@@ -2,7 +2,11 @@
 
 namespace App\Tools;
 
+use App\Enums\MessageRole;
+use App\Jobs\ExecuteAgentTaskJob;
 use App\Models\Agent;
+use App\Models\Conversation;
+use App\Models\Message;
 use App\Models\Project;
 use App\Models\Task;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -301,7 +305,15 @@ class TaskTool implements Tool
                 'assigned_id' => $agent->id,
             ]);
 
-            return "Task \"{$task->title}\" (ID:{$task->id}) assigned to {$agent->name}.";
+            if ($task->priority === 'high') {
+                ExecuteAgentTaskJob::dispatch($task->id);
+
+                return "Task \"{$task->title}\" (ID:{$task->id}) assigned to {$agent->name} for background execution.";
+            }
+
+            $this->insertCollaborativeMessage($task, $agent);
+
+            return "Task \"{$task->title}\" (ID:{$task->id}) assigned to {$agent->name} for collaborative work.";
         }
 
         $task->update([
@@ -310,5 +322,31 @@ class TaskTool implements Tool
         ]);
 
         return "Task \"{$task->title}\" (ID:{$task->id}) assigned to you.";
+    }
+
+    private function insertCollaborativeMessage(Task $task, Agent $agent): void
+    {
+        $conversation = Conversation::query()
+            ->where('agent_id', $agent->id)
+            ->latest('id')
+            ->first();
+
+        if (! $conversation instanceof Conversation) {
+            $conversation = Conversation::query()->create([
+                'agent_id' => $agent->id,
+                'title' => $agent->name,
+            ]);
+        }
+
+        $description = $task->description ? "\n{$task->description}" : '';
+        $project = $task->project_id
+            ? "\nProject: ".($task->project?->title ?? "ID:{$task->project_id}")
+            : '';
+
+        Message::query()->create([
+            'conversation_id' => $conversation->id,
+            'role' => MessageRole::System,
+            'content' => "New Task: {$task->title}{$description}{$project}\n\nReply to work on this task. When done, it can be marked complete.",
+        ]);
     }
 }

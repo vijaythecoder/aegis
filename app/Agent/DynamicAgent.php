@@ -3,6 +3,7 @@
 namespace App\Agent;
 
 use App\Agent\Middleware\InjectMemoryContext;
+use App\Agent\Middleware\InjectProjectContext;
 use App\Agent\Middleware\TrackTokenUsage;
 use App\Memory\UserProfileService;
 use App\Models\Agent as AgentModel;
@@ -109,6 +110,7 @@ class DynamicAgent implements Agent, Conversational, HasMiddleware, HasTools
     {
         return [
             app(InjectMemoryContext::class),
+            app(InjectProjectContext::class),
             app(TrackTokenUsage::class),
         ];
     }
