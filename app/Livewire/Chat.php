@@ -15,10 +15,12 @@ use App\Memory\MessageService;
 use App\Models\Conversation;
 use App\Models\Task;
 use App\Security\ApiKeyManager;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Laravel\Ai\Streaming\Events\TextDelta;
 use Livewire\Attributes\On;
 use Livewire\Component;
+use Throwable;
 
 class Chat extends Component
 {
@@ -119,6 +121,20 @@ class Chat extends Component
             }
 
             $this->generateTitleIfNeeded($text);
+        } catch (Throwable $e) {
+            Log::error('Chat: response generation failed', [
+                'conversation_id' => $this->conversationId,
+                'error' => $e->getMessage(),
+            ]);
+
+            $messageService = app(MessageService::class);
+            $messageService->store($this->conversationId, MessageRole::User, $text);
+            $messageService->store(
+                $this->conversationId,
+                MessageRole::Assistant,
+                "I'm sorry, I ran into an error processing your request. Please try again.\n\n> {$e->getMessage()}",
+            );
+
         } finally {
             $this->isThinking = false;
             $this->dispatch('agent-status-changed', state: 'idle');
