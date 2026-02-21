@@ -20,7 +20,7 @@ class AgentFactory extends Factory
      */
     public function definition(): array
     {
-        $name = fake()->word();
+        $name = fake()->unique()->word();
 
         return [
             'name' => $name,

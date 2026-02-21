@@ -4,6 +4,8 @@ namespace App\Livewire;
 
 use App\Models\Agent;
 use App\Models\Skill;
+use App\Services\ContextBudgetCalculator;
+use App\Services\SkillSuggestionService;
 use App\Tools\ToolRegistry;
 use Illuminate\Support\Str;
 use Livewire\Component;
@@ -35,6 +37,39 @@ class AgentSettings extends Component
     public string $flashMessage = '';
 
     public string $flashType = 'success';
+
+    public ?array $contextBudget = null;
+
+    /** @var array<int, array{id: int, name: string, slug: string}> */
+    public array $suggestedSkills = [];
+
+    public function updatedPersona(): void
+    {
+        if (mb_strlen($this->persona) < 10) {
+            $this->suggestedSkills = [];
+
+            return;
+        }
+
+        $suggestions = app(SkillSuggestionService::class)->suggestForPersona($this->persona);
+
+        $this->suggestedSkills = $suggestions->map(fn (Skill $skill) => [
+            'id' => $skill->id,
+            'name' => $skill->name,
+            'slug' => $skill->slug,
+        ])->values()->all();
+    }
+
+    public function applySuggestedSkill(int $skillId): void
+    {
+        if (! in_array($skillId, $this->selectedSkills)) {
+            $this->selectedSkills[] = $skillId;
+        }
+
+        $this->suggestedSkills = array_values(
+            array_filter($this->suggestedSkills, fn (array $s) => $s['id'] !== $skillId)
+        );
+    }
 
     public function createAgent(): void
     {
@@ -87,6 +122,7 @@ class AgentSettings extends Component
         $this->isActive = (bool) $agent->is_active;
         $this->selectedSkills = $agent->skills()->pluck('skills.id')->map(fn ($id) => (int) $id)->all();
         $this->selectedTools = $agent->tools()->pluck('tool_class')->all();
+        $this->contextBudget = app(ContextBudgetCalculator::class)->calculate($agent);
         $this->showForm = true;
     }
 
@@ -179,6 +215,8 @@ class AgentSettings extends Component
         $this->isActive = true;
         $this->selectedSkills = [];
         $this->selectedTools = [];
+        $this->contextBudget = null;
+        $this->suggestedSkills = [];
     }
 
     private function flash(string $message, string $type): void

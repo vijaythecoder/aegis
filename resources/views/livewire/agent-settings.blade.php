@@ -60,9 +60,25 @@
 
             <div>
                 <label class="block text-xs font-medium text-aegis-text-dim mb-1.5">Persona</label>
-                <textarea wire:model="persona" rows="4" maxlength="5000" placeholder="Describe the agent's personality and expertise..." class="w-full bg-aegis-surface border border-aegis-border rounded-lg px-3 py-2 text-sm text-aegis-text placeholder-aegis-text-dim focus:outline-none focus:border-aegis-accent/40 transition-colors resize-none"></textarea>
+                <textarea wire:model.blur="persona" rows="4" maxlength="5000" placeholder="Describe the agent's personality and expertise..." class="w-full bg-aegis-surface border border-aegis-border rounded-lg px-3 py-2 text-sm text-aegis-text placeholder-aegis-text-dim focus:outline-none focus:border-aegis-accent/40 transition-colors resize-none"></textarea>
                 @error('persona') <span class="text-xs text-red-400 mt-1">{{ $message }}</span> @enderror
             </div>
+
+            @if ($suggestedSkills !== [] && !$editingAgentId)
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-xs text-aegis-text-dim">Suggested:</span>
+                    @foreach ($suggestedSkills as $suggestion)
+                        <button
+                            wire:click="applySuggestedSkill({{ $suggestion['id'] }})"
+                            type="button"
+                            class="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-aegis-accent/30 bg-aegis-accent/5 text-xs text-aegis-accent hover:bg-aegis-accent/15 transition-colors"
+                        >
+                            <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            {{ $suggestion['name'] }}
+                        </button>
+                    @endforeach
+                </div>
+            @endif
 
             <div class="grid grid-cols-2 gap-4">
                 <div>
@@ -87,6 +103,34 @@
                             </label>
                         @endforeach
                     </div>
+                </div>
+            @endif
+
+            @if ($contextBudget)
+                <div class="rounded-lg border border-aegis-border bg-aegis-surface p-3 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-medium text-aegis-text-dim">Context Budget</span>
+                        <span class="text-xs text-aegis-text-dim">{{ number_format($contextBudget['total']) }} / {{ number_format($contextBudget['model_limit']) }} tokens</span>
+                    </div>
+                    <div class="w-full bg-aegis-800 rounded-full h-2 overflow-hidden">
+                        @php
+                            $pct = $contextBudget['model_limit'] > 0 ? min(100, round(($contextBudget['total'] / $contextBudget['model_limit']) * 100)) : 0;
+                        @endphp
+                        <div @class([
+                            'h-full rounded-full transition-all duration-300',
+                            'bg-emerald-400' => $pct <= 20,
+                            'bg-amber-400' => $pct > 20 && $pct <= 30,
+                            'bg-red-400' => $pct > 30,
+                        ]) style="width: {{ $pct }}%"></div>
+                    </div>
+                    <div class="flex gap-3 text-[10px] text-aegis-text-dim">
+                        <span>Base: {{ number_format($contextBudget['base_prompt']) }}</span>
+                        <span>Skills: {{ number_format($contextBudget['skills']) }}</span>
+                        <span>Projects: {{ number_format($contextBudget['project_context']) }}</span>
+                    </div>
+                    @if ($contextBudget['warning'])
+                        <p class="text-xs text-amber-400">{{ $contextBudget['warning'] }}</p>
+                    @endif
                 </div>
             @endif
 
