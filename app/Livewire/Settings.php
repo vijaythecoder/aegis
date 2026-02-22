@@ -8,7 +8,9 @@ use App\Marketplace\MarketplaceService;
 use App\Marketplace\PluginRegistry;
 use App\Memory\MemoryService;
 use App\Memory\UserProfileService;
+use App\Models\Agent;
 use App\Models\AuditLog;
+use App\Models\ChannelAgent;
 use App\Models\Conversation;
 use App\Models\Memory;
 use App\Models\Message;
@@ -81,6 +83,8 @@ class Settings extends Component
 
     public string $imessageChatId = '';
 
+    public array $channelAgents = [];
+
     public function mount(): void
     {
         $this->defaultProvider = $this->getSettingValue('agent', 'default_provider')
@@ -111,6 +115,8 @@ class Settings extends Component
         }
 
         $this->imessageChatId = $this->getSettingValue('messaging', 'imessage_chat_id') ?? '';
+
+        $this->loadChannelAgents();
     }
 
     public function setTab(string $tab): void
@@ -701,6 +707,7 @@ class Settings extends Component
             'memories' => $this->activeTab === 'memory' ? app(MemoryService::class)->all() : collect(),
             'userProfile' => $this->activeTab === 'memory' ? app(UserProfileService::class)->getProfile() : null,
             'proactiveTasks' => $this->activeTab === 'automation' ? ProactiveTask::query()->orderBy('name')->get() : collect(),
+            'agents' => $this->activeTab === 'messaging' ? Agent::query()->where('is_active', true)->get() : collect(),
         ]);
     }
 
@@ -764,5 +771,30 @@ class Settings extends Component
     private function installedPlugins(): Collection
     {
         return collect(app(PluginManager::class)->installed())->values();
+    }
+
+    private function loadChannelAgents(): void
+    {
+        $this->channelAgents = ChannelAgent::query()
+            ->whereNotNull('agent_id')
+            ->pluck('agent_id', 'channel')
+            ->map(fn ($id) => (int) $id)
+            ->toArray();
+    }
+
+    public function saveChannelAgent(string $channel, ?int $agentId): void
+    {
+        if ($agentId === null || $agentId === 0) {
+            ChannelAgent::query()->where('channel', $channel)->delete();
+            unset($this->channelAgents[$channel]);
+        } else {
+            ChannelAgent::query()->updateOrCreate(
+                ['channel' => $channel],
+                ['agent_id' => $agentId],
+            );
+            $this->channelAgents[$channel] = $agentId;
+        }
+
+        $this->flash("Default agent for {$channel} updated.", 'success');
     }
 }

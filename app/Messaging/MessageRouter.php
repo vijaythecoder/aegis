@@ -3,8 +3,11 @@
 namespace App\Messaging;
 
 use App\Agent\AegisAgent;
+use App\Agent\AgentRegistry;
+use App\Agent\DynamicAgent;
 use App\Jobs\ExtractMemoriesJob;
 use App\Messaging\Contracts\MessagingAdapter;
+use App\Models\ChannelAgent;
 use App\Tools\BrowserTool;
 use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Streaming\Events\TextDelta;
@@ -26,7 +29,7 @@ class MessageRouter
             $message->senderId,
         );
 
-        $agent = $this->agent ?? app(AegisAgent::class);
+        $agent = $this->resolveAgentForChannel($message->platform);
 
         $agent->forConversation((string) $conversation->id);
 
@@ -37,6 +40,7 @@ class MessageRouter
             'platform' => $message->platform,
             'conversation_id' => $conversation->id,
             'tool_count' => $toolCount,
+            'agent_type' => $agent::class,
         ]);
 
         BrowserTool::flushScreenshots();
@@ -75,5 +79,27 @@ class MessageRouter
     public function getAdapter(string $platform): ?MessagingAdapter
     {
         return $this->adapters[strtolower($platform)] ?? null;
+    }
+
+    private function resolveAgentForChannel(string $platform): AegisAgent|DynamicAgent
+    {
+        if ($this->agent !== null) {
+            return $this->agent;
+        }
+
+        $channelAgent = ChannelAgent::forChannel(strtolower($platform));
+
+        if ($channelAgent !== null && $channelAgent->agent_id !== null) {
+            try {
+                return app(AgentRegistry::class)->resolve($channelAgent->agent_id);
+            } catch (\Throwable) {
+                Log::warning('[MessageRouter] Channel agent resolution failed, using default', [
+                    'channel' => $platform,
+                    'agent_id' => $channelAgent->agent_id,
+                ]);
+            }
+        }
+
+        return app(AegisAgent::class);
     }
 }

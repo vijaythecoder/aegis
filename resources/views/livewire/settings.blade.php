@@ -868,6 +868,61 @@
                         @endif
                     </div>
                 </div>
+
+                {{-- Channel Agent Routing --}}
+                @if ($agents->isNotEmpty())
+                    <div class="rounded-xl border border-aegis-border bg-aegis-850 p-5 space-y-4">
+                        <div>
+                            <h4 class="text-sm font-semibold text-aegis-text">Default Agents per Channel</h4>
+                            <p class="text-xs text-aegis-text-dim mt-1">Choose which agent responds on each messaging platform. Leave as "Default" to use Aegis.</p>
+                        </div>
+
+                        <div class="space-y-3">
+                            {{-- iMessage Agent --}}
+                            <div class="flex items-center justify-between gap-4 rounded-lg border border-aegis-border bg-aegis-900/60 px-4 py-3">
+                                <div class="flex items-center gap-2.5">
+                                    <div class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-400/20 flex items-center justify-center">
+                                        <svg class="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                                        </svg>
+                                    </div>
+                                    <span class="text-sm font-medium text-aegis-text">iMessage</span>
+                                </div>
+                                <select
+                                    wire:change="saveChannelAgent('imessage', $event.target.value)"
+                                    class="w-48 px-3 py-1.5 rounded-lg bg-aegis-900 border border-aegis-border text-sm text-aegis-text focus:outline-none focus:border-aegis-accent/40 focus:ring-1 focus:ring-aegis-accent/20 transition-colors"
+                                >
+                                    <option value="0">Default (Aegis)</option>
+                                    @foreach ($agents as $agent)
+                                        <option value="{{ $agent->id }}" @selected(($channelAgents['imessage'] ?? null) == $agent->id)>{{ $agent->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+
+                            {{-- Telegram Agent --}}
+                            <div class="flex items-center justify-between gap-4 rounded-lg border border-aegis-border bg-aegis-900/60 px-4 py-3">
+                                <div class="flex items-center gap-2.5">
+                                    <div class="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-400/20 flex items-center justify-center">
+                                        <svg class="w-4 h-4 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M22 2L11 13"/>
+                                            <path d="M22 2L15 22 11 13 2 9l20-7z"/>
+                                        </svg>
+                                    </div>
+                                    <span class="text-sm font-medium text-aegis-text">Telegram</span>
+                                </div>
+                                <select
+                                    wire:change="saveChannelAgent('telegram', $event.target.value)"
+                                    class="w-48 px-3 py-1.5 rounded-lg bg-aegis-900 border border-aegis-border text-sm text-aegis-text focus:outline-none focus:border-aegis-accent/40 focus:ring-1 focus:ring-aegis-accent/20 transition-colors"
+                                >
+                                    <option value="0">Default (Aegis)</option>
+                                    @foreach ($agents as $agent)
+                                        <option value="{{ $agent->id }}" @selected(($channelAgents['telegram'] ?? null) == $agent->id)>{{ $agent->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                @endif
             </div>
         @endif
 

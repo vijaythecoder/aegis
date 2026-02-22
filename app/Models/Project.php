@@ -47,4 +47,27 @@ class Project extends Model
     {
         return $query->where('status', 'completed');
     }
+
+    public static function fromTemplate(ProjectTemplate $template, array $overrides = []): static
+    {
+        $project = static::query()->create(array_merge([
+            'title' => $template->name,
+            'description' => $template->description,
+            'category' => $template->category,
+            'status' => 'active',
+        ], $overrides));
+
+        foreach ($template->tasks as $taskData) {
+            Task::query()->create([
+                'project_id' => $project->id,
+                'title' => $taskData['title'],
+                'description' => $taskData['description'] ?? null,
+                'assigned_type' => $taskData['assigned_type'] ?? 'user',
+                'priority' => $taskData['priority'] ?? 'medium',
+                'status' => 'pending',
+            ]);
+        }
+
+        return $project->load('tasks');
+    }
 }

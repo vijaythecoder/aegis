@@ -3,6 +3,7 @@
 namespace App\Tools;
 
 use App\Models\Project;
+use App\Models\ProjectTemplate;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
@@ -32,13 +33,14 @@ class ProjectTool implements Tool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'action' => $schema->string()->enum(['create', 'list', 'update', 'archive', 'get'])->description('The action to perform.')->required(),
+            'action' => $schema->string()->enum(['create', 'list', 'update', 'archive', 'get', 'create_from_template', 'list_templates'])->description('The action to perform.')->required(),
             'project_id' => $schema->integer()->description('ID of the project (required for update, archive, get).'),
             'title' => $schema->string()->description('Project title (required for create, optional for update).'),
             'description' => $schema->string()->description('Project description.'),
             'category' => $schema->string()->description('Category (e.g., finance, health, education, home, work, personal).'),
             'deadline' => $schema->string()->description('Deadline in YYYY-MM-DD format.'),
             'status' => $schema->string()->enum(['active', 'paused', 'completed', 'archived'])->description('Filter for list, or new status for update.'),
+            'template_slug' => $schema->string()->description('Template slug for create_from_template (e.g., tax-preparation, home-project, learning-goal, health-goal).'),
         ];
     }
 
@@ -52,7 +54,9 @@ class ProjectTool implements Tool
             'update' => $this->updateProject($request),
             'archive' => $this->archiveProject($request),
             'get' => $this->getProject($request),
-            default => "Unknown action: {$action}. Use create, list, update, archive, or get.",
+            'create_from_template' => $this->createFromTemplate($request),
+            'list_templates' => $this->listTemplates(),
+            default => "Unknown action: {$action}. Use create, list, update, archive, get, create_from_template, or list_templates.",
         };
     }
 
@@ -278,5 +282,56 @@ class ProjectTool implements Tool
         }
 
         return implode("\n", $lines);
+    }
+
+    private function createFromTemplate(Request $request): string
+    {
+        $slug = trim((string) $request->string('template_slug'));
+
+        if ($slug === '') {
+            return 'template_slug is required for create_from_template. Use list_templates to see available templates.';
+        }
+
+        $template = ProjectTemplate::query()->where('slug', $slug)->first();
+
+        if (! $template instanceof ProjectTemplate) {
+            return "No template found with slug \"{$slug}\". Use list_templates to see available templates.";
+        }
+
+        $overrides = [];
+
+        $title = trim((string) $request->string('title'));
+        if ($title !== '') {
+            $overrides['title'] = $title;
+        }
+
+        $deadline = trim((string) $request->string('deadline'));
+        if ($deadline !== '') {
+            $overrides['deadline'] = $deadline;
+        }
+
+        $project = Project::fromTemplate($template, $overrides);
+
+        $taskList = $project->tasks->map(fn ($t) => "  ⬜ {$t->title}")->implode("\n");
+
+        return "Project created from template \"{$template->name}\" (ID: {$project->id}): \"{$project->title}\"\n"
+            ."Category: {$project->category} | Status: active | Tasks: {$project->tasks->count()}\n"
+            .$taskList;
+    }
+
+    private function listTemplates(): string
+    {
+        $templates = ProjectTemplate::query()->orderBy('name')->get();
+
+        if ($templates->isEmpty()) {
+            return 'No project templates available. Templates can be seeded with php artisan db:seed --class=ProjectTemplateSeeder.';
+        }
+
+        return $templates->map(function (ProjectTemplate $template): string {
+            $taskCount = count($template->tasks);
+            $builtIn = $template->is_built_in ? ' (built-in)' : '';
+
+            return "[{$template->slug}] {$template->name}{$builtIn} — {$template->description} ({$taskCount} tasks)";
+        })->implode("\n");
     }
 }
