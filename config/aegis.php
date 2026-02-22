@@ -213,6 +213,14 @@ return [
         'circular_check' => (bool) env('AEGIS_DELEGATION_CIRCULAR_CHECK', true),
     ],
 
+    'proactive' => [
+        'project_review' => [
+            'enabled' => (bool) env('AEGIS_PROJECT_REVIEW_ENABLED', true),
+            'schedule' => env('AEGIS_PROJECT_REVIEW_SCHEDULE', '0 9 * * *'),
+            'telegram' => (bool) env('AEGIS_PROJECT_REVIEW_TELEGRAM', false),
+        ],
+    ],
+
     'security' => [
         'auto_allow_read' => true,
         'approval_timeout' => 60,

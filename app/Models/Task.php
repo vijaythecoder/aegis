@@ -27,6 +27,7 @@ class Task extends Model
         'completed_at',
         'delegation_depth',
         'delegated_from',
+        'reminder_sent_at',
     ];
 
     protected function casts(): array
@@ -35,6 +36,7 @@ class Task extends Model
             'deadline' => 'datetime',
             'completed_at' => 'datetime',
             'delegation_depth' => 'integer',
+            'reminder_sent_at' => 'array',
         ];
     }
 

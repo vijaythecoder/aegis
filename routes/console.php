@@ -14,6 +14,7 @@ Schedule::command('aegis:memory:consolidate')->monthly();
 Schedule::command('aegis:proactive:run')->everyMinute();
 Schedule::command('aegis:refresh-pricing')->daily();
 Schedule::command('aegis:refresh-models')->daily();
+Schedule::command('aegis:projects:review')->cron(config('aegis.proactive.project_review.schedule', '0 9 * * *'));
 
 Schedule::call(function () {
     app(\App\Agent\ActionExecutor::class)->expireStaleActions();
