@@ -208,6 +208,11 @@ return [
 
     'failover_chain' => ['anthropic', 'openai', 'gemini'],
 
+    'delegation' => [
+        'max_depth' => (int) env('AEGIS_DELEGATION_MAX_DEPTH', 3),
+        'circular_check' => (bool) env('AEGIS_DELEGATION_CIRCULAR_CHECK', true),
+    ],
+
     'security' => [
         'auto_allow_read' => true,
         'approval_timeout' => 60,

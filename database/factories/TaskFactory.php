@@ -56,4 +56,12 @@ class TaskFactory extends Factory
             'assigned_type' => 'user',
         ]);
     }
+
+    public function delegated(int $fromTaskId, int $depth = 1): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'delegated_from' => $fromTaskId,
+            'delegation_depth' => $depth,
+        ]);
+    }
 }

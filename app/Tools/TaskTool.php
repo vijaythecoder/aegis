@@ -10,6 +10,7 @@ use App\Models\Message;
 use App\Models\Project;
 use App\Models\Task;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 use Stringable;
@@ -49,6 +50,7 @@ class TaskTool implements Tool
             'deadline' => $schema->string()->description('Deadline in YYYY-MM-DD format.'),
             'status' => $schema->string()->enum(['pending', 'in_progress', 'completed', 'cancelled'])->description('Filter for list, or new status for update.'),
             'output' => $schema->string()->description('Deliverable or result text when completing a task.'),
+            'source_task_id' => $schema->integer()->description('ID of the originating task when delegating work to another agent. Used for delegation tracking.'),
         ];
     }
 
@@ -116,6 +118,36 @@ class TaskTool implements Tool
             $data['assigned_id'] = $agent->id;
         }
 
+        $sourceTaskId = $request->integer('source_task_id');
+        if ($sourceTaskId > 0 && $data['assigned_type'] === 'agent') {
+            $sourceTask = Task::query()->find($sourceTaskId);
+            if ($sourceTask instanceof Task) {
+                $delegationResult = $this->validateDelegation($sourceTask, (int) $data['assigned_id']);
+                if (is_string($delegationResult)) {
+                    return $delegationResult;
+                }
+
+                $data['delegated_from'] = $sourceTask->id;
+                $data['delegation_depth'] = $sourceTask->delegation_depth + 1;
+            }
+        }
+
+        if (! isset($data['delegated_from']) && $data['assigned_type'] === 'agent') {
+            $contextTaskId = app()->bound('aegis.current_task_id') ? app('aegis.current_task_id') : null;
+            if ($contextTaskId !== null) {
+                $contextTask = Task::query()->find($contextTaskId);
+                if ($contextTask instanceof Task) {
+                    $delegationResult = $this->validateDelegation($contextTask, (int) $data['assigned_id']);
+                    if (is_string($delegationResult)) {
+                        return $delegationResult;
+                    }
+
+                    $data['delegated_from'] = $contextTask->id;
+                    $data['delegation_depth'] = $contextTask->delegation_depth + 1;
+                }
+            }
+        }
+
         $task = Task::query()->create($data);
 
         $info = "Task created (ID: {$task->id}): \"{$task->title}\"";
@@ -127,11 +159,60 @@ class TaskTool implements Tool
         if ($task->assigned_type === 'agent') {
             $agentName = Agent::query()->find($task->assigned_id)?->name ?? 'unknown';
             $info .= " — assigned to {$agentName}";
+
+            // Auto-dispatch delegation tasks
+            if ($task->delegated_from !== null || $task->priority === 'high') {
+                ExecuteAgentTaskJob::dispatch($task->id);
+                $info .= ' (dispatched for background execution)';
+            } else {
+                $agent = Agent::query()->find($task->assigned_id);
+                if ($agent instanceof Agent) {
+                    $this->insertCollaborativeMessage($task, $agent);
+                }
+            }
         }
 
         $info .= " [{$task->priority}] status: {$task->status}.";
 
+        if ($task->delegated_from !== null) {
+            $info .= " Delegation depth: {$task->delegation_depth}.";
+        }
+
         return $info;
+    }
+
+    private function validateDelegation(Task $sourceTask, int $targetAgentId): ?string
+    {
+        $maxDepth = (int) config('aegis.delegation.max_depth', 3);
+        $newDepth = $sourceTask->delegation_depth + 1;
+
+        if ($newDepth > $maxDepth) {
+            Log::warning('aegis.delegation.depth_exceeded', [
+                'source_task_id' => $sourceTask->id,
+                'current_depth' => $sourceTask->delegation_depth,
+                'max_depth' => $maxDepth,
+            ]);
+
+            return "Task not created: delegation depth limit ({$maxDepth}) exceeded. Current chain depth: {$sourceTask->delegation_depth}.";
+        }
+
+        if (config('aegis.delegation.circular_check', true) && $sourceTask->hasAgentInDelegationChain($targetAgentId)) {
+            Log::warning('aegis.delegation.circular_detected', [
+                'source_task_id' => $sourceTask->id,
+                'target_agent_id' => $targetAgentId,
+            ]);
+
+            return 'Task not created: circular delegation detected — target agent already appears in the delegation chain.';
+        }
+
+        if ($newDepth > 2) {
+            Log::info('aegis.delegation.deep_chain', [
+                'source_task_id' => $sourceTask->id,
+                'new_depth' => $newDepth,
+            ]);
+        }
+
+        return null;
     }
 
     private function listTasks(Request $request): string

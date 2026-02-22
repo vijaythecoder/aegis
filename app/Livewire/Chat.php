@@ -12,6 +12,7 @@ use App\Enums\MessageRole;
 use App\Jobs\ExtractMemoriesJob;
 use App\Memory\ConversationService;
 use App\Memory\MessageService;
+use App\Models\Agent;
 use App\Models\Conversation;
 use App\Models\Task;
 use App\Security\ApiKeyManager;
@@ -59,6 +60,14 @@ class Chat extends Component
         $text = trim($this->message);
 
         if ($text === '') {
+            return;
+        }
+
+        $mention = $this->extractMention($text);
+
+        if ($mention !== null) {
+            $this->routeToAgent($mention['agent'], $mention['message']);
+
             return;
         }
 
@@ -326,6 +335,71 @@ class Chat extends Component
         }
 
         return app(ModelCapabilities::class)->modelsForProvider($this->selectedProvider);
+    }
+
+    /**
+     * @return array{agent: Agent, message: string}|null
+     */
+    private function extractMention(string $text): ?array
+    {
+        if (! str_starts_with($text, '@')) {
+            return null;
+        }
+
+        $agents = Agent::query()->where('is_active', true)->get();
+
+        foreach ($agents as $agent) {
+            if (str_starts_with(strtolower($text), '@'.strtolower($agent->name).' ')
+                || strtolower($text) === '@'.strtolower($agent->name)) {
+                $remainder = trim(substr($text, strlen($agent->name) + 1));
+
+                return ['agent' => $agent, 'message' => $remainder];
+            }
+
+            if (str_starts_with(strtolower($text), '@'.strtolower($agent->slug).' ')
+                || strtolower($text) === '@'.strtolower($agent->slug)) {
+                $remainder = trim(substr($text, strlen($agent->slug) + 1));
+
+                return ['agent' => $agent, 'message' => $remainder];
+            }
+        }
+
+        return null;
+    }
+
+    private function routeToAgent(Agent $agent, string $messageText): void
+    {
+        if ($messageText === '') {
+            $messageText = 'Hello!';
+        }
+
+        if ($this->conversationId !== null) {
+            app(MessageService::class)->store(
+                $this->conversationId,
+                MessageRole::System,
+                "Message routed to @{$agent->name}: \"{$messageText}\"",
+            );
+        }
+
+        $agentConversation = Conversation::query()
+            ->where('agent_id', $agent->id)
+            ->orderByDesc('last_message_at')
+            ->first();
+
+        if (! $agentConversation instanceof Conversation) {
+            $agentConversation = app(ConversationService::class)->create('');
+            $agentConversation->update(['agent_id' => $agent->id]);
+        }
+
+        $this->conversationId = $agentConversation->id;
+        $this->message = '';
+        $this->pendingMessage = $messageText;
+        $this->isThinking = true;
+
+        $this->dispatch('conversation-selected', conversationId: $agentConversation->id);
+        $this->dispatch('agent-status-changed', state: 'thinking');
+
+        $this->js('$wire.generateResponse()');
     }
 
     public function renderMarkdown(string $content): string
