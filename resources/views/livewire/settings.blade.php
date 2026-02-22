@@ -753,9 +753,8 @@
                     @endif
                 </div>
 
-                {{-- Telegram (existing reference) --}}
+                {{-- Telegram --}}
                 <div class="rounded-xl border border-aegis-border bg-aegis-850 p-5">
-                    @php($telegramConfigured = (string) config('aegis.messaging.telegram.bot_token', '') !== '')
                     <div class="flex items-center justify-between">
                         <div class="flex items-center gap-3">
                             <div class="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-400/20 flex items-center justify-center">
@@ -768,9 +767,9 @@
                                 <h4 class="text-sm font-semibold text-aegis-text">Telegram</h4>
                                 <p class="text-xs text-aegis-text-dim mt-0.5">
                                     @if ($telegramConfigured)
-                                        Connected. Configure token in the Providers tab.
+                                        Bot token configured.
                                     @else
-                                        Set your bot token in the Providers tab to enable.
+                                        Add your bot token below to get started.
                                     @endif
                                 </p>
                             </div>
@@ -798,8 +797,24 @@
                         </button>
                     </div>
 
-                    @if ($telegramConfigured)
-                        <div class="mt-4 rounded-lg border border-aegis-border bg-aegis-900/60 px-4 py-3 space-y-2">
+                    {{-- Bot Token Input --}}
+                    <div class="mt-4 rounded-lg border border-aegis-border bg-aegis-900/60 px-4 py-3 space-y-3">
+                        @if ($telegramConfigured)
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-1.5">
+                                    <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
+                                    <span class="text-xs text-emerald-400 font-medium">Token configured</span>
+                                </div>
+                                <button
+                                    type="button"
+                                    wire:click="removeTelegramToken"
+                                    wire:confirm="Remove Telegram bot token? This will disable the integration."
+                                    class="px-2.5 py-1 rounded-lg text-xs font-medium text-red-300 border border-red-400/20 bg-red-500/5 hover:bg-red-500/15 transition-colors"
+                                >
+                                    Remove
+                                </button>
+                            </div>
+
                             <div class="flex items-center justify-between">
                                 <p class="text-xs text-aegis-text-dim">Status</p>
                                 <div class="flex items-center gap-1.5">
@@ -830,15 +845,28 @@
                                     ])>{{ $telegramPollerRunning ? 'Running' : 'Stopped' }}</span>
                                 </div>
                             </div>
-                        </div>
-                    @else
-                        <div class="mt-4 rounded-lg border border-aegis-border bg-aegis-900/60 px-4 py-3">
-                            <div class="flex items-center gap-1.5">
-                                <div class="w-2 h-2 rounded-full bg-aegis-600"></div>
-                                <span class="text-xs text-aegis-text-dim">Not configured</span>
+                        @else
+                            <div>
+                                <label class="block text-xs font-medium text-aegis-text-dim mb-1.5">Bot Token</label>
+                                <p class="text-[11px] text-aegis-text-dim/60 mb-2">Create a bot via <a href="https://t.me/BotFather" target="_blank" class="text-blue-400 hover:underline">@BotFather</a> on Telegram and paste the token here.</p>
+                                <div class="flex gap-2">
+                                    <input
+                                        type="password"
+                                        wire:model="telegramBotToken"
+                                        placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v..."
+                                        class="flex-1 px-3 py-2 rounded-lg bg-aegis-surface border border-aegis-border text-sm text-aegis-text placeholder:text-aegis-text-dim/40 focus:outline-none focus:border-aegis-accent/40 focus:ring-1 focus:ring-aegis-accent/20 transition-colors"
+                                    />
+                                    <button
+                                        type="button"
+                                        wire:click="saveTelegramToken"
+                                        class="px-4 py-2 rounded-lg text-xs font-semibold text-aegis-accent border border-aegis-accent/30 bg-aegis-accent/10 hover:bg-aegis-accent/20 transition-colors"
+                                    >
+                                        Save
+                                    </button>
+                                </div>
                             </div>
-                        </div>
-                    @endif
+                        @endif
+                    </div>
                 </div>
             </div>
         @endif

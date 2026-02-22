@@ -75,6 +75,10 @@ class Settings extends Component
 
     public bool $telegramEnabled = false;
 
+    public string $telegramBotToken = '';
+
+    public bool $telegramConfigured = false;
+
     public string $imessageChatId = '';
 
     public function mount(): void
@@ -99,9 +103,10 @@ class Settings extends Component
         $this->imessageEnabled = (bool) ($this->getSettingValue('messaging', 'imessage_enabled')
             ?? config('aegis.messaging.imessage.enabled', PHP_OS === 'Darwin'));
 
+        $this->telegramConfigured = $this->isTelegramConfigured();
         $this->telegramEnabled = (bool) $this->getSettingValue('messaging', 'telegram_enabled');
 
-        if ($this->telegramEnabled === false && config('aegis.messaging.telegram.bot_token')) {
+        if ($this->telegramEnabled === false && $this->telegramConfigured) {
             $this->telegramEnabled = true;
         }
 
@@ -140,12 +145,47 @@ class Settings extends Component
         $this->flash("iMessage integration {$status}.", 'success');
     }
 
-    public function toggleTelegram(): void
+    public function saveTelegramToken(): void
     {
-        $token = (string) config('aegis.messaging.telegram.bot_token', '');
+        $token = trim($this->telegramBotToken);
 
         if ($token === '') {
-            $this->flash('Set your Telegram bot token in the Providers tab first.', 'error');
+            $this->flash('Bot token cannot be empty.', 'error');
+
+            return;
+        }
+
+        $this->saveSetting('credentials', 'telegram_bot_token', encrypt($token));
+        config(['aegis.messaging.telegram.bot_token' => $token]);
+        $this->telegramBotToken = '';
+        $this->telegramConfigured = true;
+        $this->flash('Telegram bot token saved.', 'success');
+    }
+
+    public function removeTelegramToken(): void
+    {
+        Setting::query()
+            ->where('group', 'credentials')
+            ->where('key', 'telegram_bot_token')
+            ->delete();
+
+        config(['aegis.messaging.telegram.bot_token' => '']);
+        $this->telegramConfigured = false;
+        $this->telegramEnabled = false;
+        $this->saveSetting('messaging', 'telegram_enabled', '0');
+
+        try {
+            ChildProcess::stop('telegram-poller');
+        } catch (Throwable) {
+        }
+
+        $this->flash('Telegram bot token removed.', 'success');
+    }
+
+    public function toggleTelegram(): void
+    {
+        if (! $this->telegramConfigured) {
+            $this->flash('Set your Telegram bot token first.', 'error');
 
             return;
         }
@@ -671,6 +711,18 @@ class Settings extends Component
         } catch (Throwable) {
             return false;
         }
+    }
+
+    private function isTelegramConfigured(): bool
+    {
+        if ((string) config('aegis.messaging.telegram.bot_token', '') !== '') {
+            return true;
+        }
+
+        return Setting::query()
+            ->where('group', 'credentials')
+            ->where('key', 'telegram_bot_token')
+            ->exists();
     }
 
     private function flash(string $message, string $type): void

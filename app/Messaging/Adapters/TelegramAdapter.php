@@ -147,8 +147,24 @@ class TelegramAdapter extends BaseAdapter
         }
 
         $token = (string) config('aegis.messaging.telegram.bot_token', '');
+
         if ($token === '') {
-            throw new RuntimeException('AEGIS_TELEGRAM_BOT_TOKEN is not configured.');
+            $encrypted = Setting::query()
+                ->where('group', 'credentials')
+                ->where('key', 'telegram_bot_token')
+                ->value('value');
+
+            if ($encrypted) {
+                try {
+                    $token = decrypt($encrypted);
+                } catch (\Throwable) {
+                    $token = '';
+                }
+            }
+        }
+
+        if ($token === '') {
+            throw new RuntimeException('Telegram bot token is not configured. Set it in Settings > Messaging.');
         }
 
         $nutgramClass = 'SergiX44\\Nutgram\\Nutgram';
